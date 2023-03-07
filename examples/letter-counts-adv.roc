@@ -5,7 +5,6 @@ app "example"
     }
     imports [
         cli.Stdout,
-        cli.Stderr,
         parser.ParserAdvanced.{ Parser, PStep, State, fromState, buildPrimitiveParser }
     ]
     provides [main] to cli
@@ -14,7 +13,7 @@ Letter : [A, B, C, Other]
 
 Problem : [ParsingFailure Str]
 
-U8Parser a : Parser {} (List U8) Problem a
+U8Parser a : Parser {} Problem a
 
 letterParser : U8Parser Letter
 letterParser =
