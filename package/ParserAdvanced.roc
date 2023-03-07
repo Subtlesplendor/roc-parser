@@ -19,6 +19,9 @@ interface ParserAdvanced
     imports []
 
 
+# -- PARSERS ------------------ 
+
+
 Parser context problem value := 
     State context -> PStep context problem value
 
@@ -58,6 +61,8 @@ buildPrimitiveParser = \fun ->
     @Parser fun
 
 
+#-- RUN ------------------ 
+
 run : Parser c x a, List U8 -> Result a (List (DeadEnd c x))
 run = \(@Parser parse), input ->
     state = { src: input,
@@ -69,6 +74,8 @@ run = \(@Parser parse), input ->
     when parse state is 
         Good _ value _ -> Ok value
         Bad _ bag -> Err (bagToList bag [])
+
+# -- PROBLEMS ------------------ 
 
 bagToList : Bag c x, List (DeadEnd c x) -> List (DeadEnd c x)
 bagToList = \bag, list ->
@@ -88,7 +95,7 @@ fromInfo = \row, col, x, context ->
   AddRight Empty { row: row, col: col, problem: x, contextStack: context }
 
 
-#------------------        
+# -- PRIMITIVES ------------------      
 
 succeed : a -> Parser c x a
 succeed = \a ->
@@ -99,7 +106,7 @@ problem = \x ->
     @Parser \s -> Bad Bool.false (fromState s x)    
 
 
-#---------------------
+# -- MAPPING ------------------ 
 
 map : Parser c x a, (a -> b) -> Parser c x b
 map = \@Parser parse, func ->
@@ -126,6 +133,7 @@ skip : Parser c x keep, Parser c x ignore -> Parser c x keep
 skip = \keepParser, ignoreParser ->
   map2 keepParser ignoreParser (\x, _ -> x)
 
+# -- AND THEN ------------------ 
 
 andThen : Parser c x a, (a -> Parser c x b) -> Parser c x b
 andThen = \@Parser parseA, callback ->
@@ -141,11 +149,15 @@ andThen = \@Parser parseA, callback ->
                 Good p2 b s2 ->
                     Good (p1 || p2) b s2
 
+# -- LAZY ------------------ 
+
 lazy : ({} -> Parser c x a) -> Parser c x a
 lazy = \thunk ->
   @Parser \s ->
         @Parser parse = thunk {}
         parse s
+
+# -- ONE OF ------------------ 
 
 alt : Parser c x a, Parser c x a -> Parser c x a
 alt = \@Parser first, @Parser second ->
@@ -172,7 +184,7 @@ oneOf = \parsers ->
     List.walkBackwards parsers fail (\laterParser, earlierParser -> alt earlierParser laterParser)
 
 
-#-------------------------
+# -- LOOP ------------------ 
 
 Step state a : [Loop state, Done a]
 
@@ -196,7 +208,7 @@ loopHelp = \p, state, callback, s0 ->
 
 
 
-#----------
+# -- BACKTRACKABLE ------------------ 
 
 backtrackable : Parser c x a -> Parser c x a
 backtrackable = \@Parser parse ->
@@ -211,4 +223,45 @@ backtrackable = \@Parser parse ->
 commit : a -> Parser c x a
 commit = \a ->
   @Parser \s -> Good Bool.true a s
+
+
+# -- SYMBOL ------------------ 
+
+# -- KEYWORD ------------------ 
+
+# -- TOKEN ------------------ 
+
+# -- INT ------------------ 
+
+# -- FLOAT ------------------ 
+
+# -- NUMBER ------------------ 
+
+# -- END ------------------ 
+
+# -- CHOMPED STRINGS -----------
+
+# -- CHOMP IF -----------
+
+# -- CHOMP WHILE -----------
+
+# -- CHOMP UNTIL -----------
+
+# -- CONTEXT -----------
+
+# -- INDENTATION -----------
+
+# -- POSITION -----------
+
+# -- LOW LEVEL HELPERS -----------
+
+# -- VARIABLES -----------
+
+# -- SEQUENCES -----------
+
+# -- WHITESPACE -----------
+
+
+
+
 
