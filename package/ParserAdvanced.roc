@@ -15,7 +15,9 @@ interface ParserAdvanced
              commit,
              backtrackable,
              buildPrimitiveParser,
-             fromState]
+             fromState,
+             symbol,
+             keyword]
     imports []
 
 
@@ -115,6 +117,8 @@ map = \@Parser parse, func ->
             Good p a s1 -> Good p (func a) s1
             Bad p x -> Bad p x
 
+
+#According to Semantics.md, the booleans should actually compose with &&. But in the code it uses ||. What gives?
 map2 :  Parser c x a, Parser c x b, (a, b -> value) -> Parser c x value
 map2 = \@Parser parseA, @Parser parseB, func ->
   @Parser \s0 ->
@@ -227,9 +231,50 @@ commit = \a ->
 
 # -- SYMBOL ------------------ 
 
+symbol : Token x -> Parser c x {}
+symbol =
+  token
+
 # -- KEYWORD ------------------ 
 
+keyword : Token x -> Parser c x {}
+keyword = \{str:kwd, prob: expecting} ->
+    progress = !(List.isEmpty kwd)
+    @Parser \s ->
+        when isSubString kwd {offset: s.offset, row: s.row, col: s.col} s.src is
+            Err _ ->
+                Bad Bool.false (fromState s expecting)
+            Ok pos if Result.isErr (isSubChar (\c -> c == 95) pos.offset s.src) -> #placeholder predicative    
+                Bad Bool.false (fromState s expecting) 
+            Ok p ->
+                Good progress {}
+                    { src: s.src,
+                      offset: p.offset,
+                      indent: s.indent,
+                      context: s.context,
+                      row: p.row,
+                      col: p.col
+                    }
+
 # -- TOKEN ------------------ 
+
+Token problem : {str : List U8, prob: problem}
+
+token : Token x -> Parser c x {}
+token = \{str, prob} ->
+    progress = !(List.isEmpty str)
+    @Parser \s ->
+        when isSubString str {offset:s.offset, row: s.row, col: s.col} s.src is
+            Err _ -> 
+                Bad Bool.false (fromState s prob)
+            Ok pos -> 
+                Good progress {} { src: s.src,
+                                   offset: pos.offset,
+                                    indent: s.indent,
+                                    context: s.context,
+                                    row: pos.row,
+                                    col: pos.col }
+
 
 # -- INT ------------------ 
 
@@ -254,6 +299,80 @@ commit = \a ->
 # -- POSITION -----------
 
 # -- LOW LEVEL HELPERS -----------
+
+Position : {offset: Nat, row: Nat, col: Nat}
+
+newLine: U8
+newLine = 10
+
+#This is missnamed.
+isSubString : List U8, Position, List U8 -> Result Position [NotFound, OutOfBounds]
+isSubString =\smallLst, pos, bigLst ->
+    if pos.offset + List.len smallLst <= List.len bigLst then
+
+        smallLst |> List.walkTry pos \state, c ->
+            char <- Result.try (List.get bigLst state.offset)
+            when c is
+                x if x != char ->
+                    Err NotFound
+                x if x == newLine ->
+                    Ok {offset: state.offset + 1, row: state.row + 1, col: 1}
+                _ -> 
+                    Ok {state & offset: state.offset + 1, col: state.col+1}
+    else
+        Err NotFound
+
+
+expect 
+    p = {offset: 0, row: 1, col: 1}
+    smallLst = Str.toUtf8 "Hell"
+    bigLst = Str.toUtf8 "Hello there"
+    pos = Result.withDefault (isSubString smallLst p bigLst) p
+    pos == {offset: 4, row: 1, col: 5}
+
+expect 
+    p = {offset: 0, row: 2, col: 4}
+    smallLst = Str.toUtf8 "Hello\n there"
+    bigLst = Str.toUtf8 "Hello\n there neighbour"
+    pos = Result.withDefault (isSubString smallLst p bigLst) p
+    pos == {offset: 12, row: 3, col: 7} 
+
+expect 
+    p = {offset: 4, row: 2, col: 5}
+    smallLst = Str.toUtf8 "now"
+    bigLst = Str.toUtf8 "Hi\n now"
+    pos = Result.withDefault (isSubString smallLst p bigLst) p
+    pos == {offset: 7, row: 2, col: 8} 
+
+expect 
+    p = {offset: 4, row: 2, col: 5}
+    smallLst = Str.toUtf8 "now and again"
+    bigLst = Str.toUtf8 "Hi\n now"
+    res = (isSubString smallLst p bigLst)
+    when res is 
+        Err NotFound -> Bool.true 
+        _ -> Bool.false  
+
+expect 
+    p = {offset: 0, row: 1, col: 1}
+    smallLst = Str.toUtf8 "ice"
+    bigLst = Str.toUtf8 "Hello\n there neighbour"
+    res = (isSubString smallLst p bigLst)
+    when res is 
+        Err NotFound -> Bool.true 
+        _ -> Bool.false          
+
+
+isSubChar: (U8 -> Bool), Nat, List U8 -> Result Nat [NotFound, NewLine, OutOfBounds]
+isSubChar = \predicate, offset, lst ->
+    char <- Result.try (List.get lst offset)
+    if predicate char then
+        Ok (offset + 1)
+    else if char==newLine then
+        Err NewLine
+    else
+        Err NotFound
+
 
 # -- VARIABLES -----------
 
