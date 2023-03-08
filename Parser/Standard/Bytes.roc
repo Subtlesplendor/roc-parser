@@ -1,226 +1,218 @@
-interface Parser
-    exposes [Parser,
-             DeadEnd,
-             run,
-             succeed,
-             problem,
-             map,
-             map2,
-             fail,
-             keep,
-             skip,
-             andThen,
-             lazy,
-             alt,
-             oneOf,
-             loop,
-             commit,
-             backtrackable,
-             buildPrimitiveParser,
-             symbol,
-             keyword,
-             end,
-             getChompedString,
-             mapChompedString,
-             chompIf,
-             chompWhile,
-             chompUntil,
-             chompUntilEndOr,
-             getIndent,
-             withIndent,
-             token,
-             Step,
-             getPosition,
-             getCol,
-             getRow,
-             getSource,
-             getOffset]
-    imports [ParserAdvanced]
+interface Parser.Standard.Bytes
+    exposes [
+        Parser,
+        DeadEnd,
+        run,
+        succeed,
+        problem,
+        map,
+        map2,
+        fail,
+        keep,
+        skip,
+        andThen,
+        lazy,
+        alt,
+        oneOf,
+        loop,
+        commit,
+        backtrackable,
+        buildPrimitiveParser,
+        symbol,
+        keyword,
+        end,
+        getChompedString,
+        mapChompedString,
+        chompIf,
+        chompWhile,
+        chompUntil,
+        chompUntilEndOr,
+        getIndent,
+        withIndent,
+        token,
+        Step,
+        getPosition,
+        getCol,
+        getRow,
+        getSource,
+        getOffset,
+    ]
+    imports [Parser.Advanced.Bytes]
 
+# -- PARSERS ------------------
 
-# -- PARSERS ------------------ 
+Parser value : Parser.Advanced.Bytes.Parser {} Problem value
 
+# buildPrimitiveParser : (State c -> PStep c x a) -> Parser c x a
+buildPrimitiveParser = Parser.Advanced.Bytes.buildPrimitiveParser
 
-Parser value: ParserAdvanced.Parser {} Problem value
-
-
-#buildPrimitiveParser : (State c -> PStep c x a) -> Parser c x a
-buildPrimitiveParser = ParserAdvanced.buildPrimitiveParser
-
-#-- RUN ------------------ 
+# -- RUN ------------------
 
 run : Parser a, List U8 -> Result a (List DeadEnd)
 run = \parser, input ->
-    when ParserAdvanced.run parser input is 
+    when Parser.Advanced.Bytes.run parser input is
         Ok value ->
             Ok value
+
         Err problems ->
             Err (problems |> List.map problemToDeadEnd)
 
-problemToDeadEnd : ParserAdvanced.DeadEnd {} Problem -> DeadEnd
+problemToDeadEnd : Parser.Advanced.Bytes.DeadEnd {} Problem -> DeadEnd
 problemToDeadEnd = \p ->
-  {row: p.row, col: p.col, problem: p.problem}
+    { row: p.row, col: p.col, problem: p.problem }
 
-# # -- PROBLEMS ------------------ 
+# # -- PROBLEMS ------------------
 
-DeadEnd : { row : Nat,
-            col : Nat,
-            problem : Problem}
+DeadEnd : {
+    row : Nat,
+    col : Nat,
+    problem : Problem,
+}
 
-Problem: [Expecting (List U8),
-          ExpectingInt,
-          ExpectingHex,
-          ExpectingOctal,
-          ExpectingBinary,
-          ExpectingFloat,
-          ExpectingNumber,
-          ExpectingVariable,
-          ExpectingSymbol (List U8),
-          ExpectingKeyword (List U8),
-          ExpectingEnd,
-          UnexpectedChar,
-          Problem Str,
-          BadRepeat]   
+Problem : [
+    Expecting (List U8),
+    ExpectingInt,
+    ExpectingHex,
+    ExpectingOctal,
+    ExpectingBinary,
+    ExpectingFloat,
+    ExpectingNumber,
+    ExpectingVariable,
+    ExpectingSymbol (List U8),
+    ExpectingKeyword (List U8),
+    ExpectingEnd,
+    UnexpectedChar,
+    Problem Str,
+    BadRepeat,
+]
 
-#deadEndsToString : List DeadEnd -> Str
-#deadEndsToString = \deadEnds ->
-#  "TODO deadEndsToString"             
+# deadEndsToString : List DeadEnd -> Str
+# deadEndsToString = \deadEnds ->
+#  "TODO deadEndsToString"
 
-# # -- PRIMITIVES ------------------      
+# # -- PRIMITIVES ------------------
 
 succeed : a -> Parser a
-succeed = ParserAdvanced.succeed
-
- 
+succeed = Parser.Advanced.Bytes.succeed
 
 problem : Str -> Parser a
 problem = \msg ->
-    ParserAdvanced.problem (Problem msg)
+    Parser.Advanced.Bytes.problem (Problem msg)
 
-
-# # -- MAPPING ------------------ 
+# # -- MAPPING ------------------
 
 map : Parser a, (a -> b) -> Parser b
-map = ParserAdvanced.map
-
+map = Parser.Advanced.Bytes.map
 
 # #According to Semantics.md, the booleans should actually compose with &&. But in the code it uses ||. What gives?
-map2 :  Parser a, Parser b, (a, b -> value) -> Parser value
-map2 = ParserAdvanced.map2
+map2 : Parser a, Parser b, (a, b -> value) -> Parser value
+map2 = Parser.Advanced.Bytes.map2
 
 keep : Parser (a -> b), Parser a -> Parser b
-keep = ParserAdvanced.keep
+keep = Parser.Advanced.Bytes.keep
 
 skip : Parser keep, Parser ignore -> Parser keep
-skip = ParserAdvanced.skip
+skip = Parser.Advanced.Bytes.skip
 
-# # -- AND THEN ------------------ 
+# # -- AND THEN ------------------
 
 andThen : Parser a, (a -> Parser b) -> Parser b
-andThen = ParserAdvanced.andThen
+andThen = Parser.Advanced.Bytes.andThen
 
-# # -- LAZY ------------------ 
+# # -- LAZY ------------------
 
 lazy : ({} -> Parser a) -> Parser a
-lazy = ParserAdvanced.lazy
+lazy = Parser.Advanced.Bytes.lazy
 
-# # -- ONE OF ------------------ 
+# # -- ONE OF ------------------
 
 alt : Parser a, Parser a -> Parser a
-alt = ParserAdvanced.alt
+alt = Parser.Advanced.Bytes.alt
 
 fail : Parser a
-fail = ParserAdvanced.fail
+fail = Parser.Advanced.Bytes.fail
 
 ## Try a list of parsers in turn, until one of them succeeds
 oneOf : List (Parser a) -> Parser a
-oneOf = ParserAdvanced.oneOf
+oneOf = Parser.Advanced.Bytes.oneOf
 
+# # -- LOOP ------------------
 
-# # -- LOOP ------------------ 
-
-Step state a : ParserAdvanced.Step state a
+Step state a : Parser.Advanced.Bytes.Step state a
 
 loop : state, (state -> Parser (Step state a)) -> Parser a
-loop = ParserAdvanced.loop
+loop = Parser.Advanced.Bytes.loop
 
-
-
-# # -- BACKTRACKABLE ------------------ 
+# # -- BACKTRACKABLE ------------------
 
 backtrackable : Parser a -> Parser a
-backtrackable = ParserAdvanced.backtrackable
+backtrackable = Parser.Advanced.Bytes.backtrackable
 
 commit : a -> Parser a
-commit = ParserAdvanced.commit
+commit = Parser.Advanced.Bytes.commit
 
-
-# # -- SYMBOL ------------------ 
+# # -- SYMBOL ------------------
 
 symbol : List U8 -> Parser {}
 symbol = \lst ->
-     ParserAdvanced.symbol {str: lst, prob: ExpectingSymbol lst}
+    Parser.Advanced.Bytes.symbol { str: lst, prob: ExpectingSymbol lst }
 
-# # -- KEYWORD ------------------ 
+# # -- KEYWORD ------------------
 
 keyword : List U8 -> Parser {}
-keyword = \kwd->
-    ParserAdvanced.symbol {str: kwd, prob: ExpectingKeyword kwd}
+keyword = \kwd ->
+    Parser.Advanced.Bytes.symbol { str: kwd, prob: ExpectingKeyword kwd }
 
-# # -- TOKEN ------------------ 
+# # -- TOKEN ------------------
 
 token : List U8 -> Parser {}
 token = \lst ->
-     ParserAdvanced.token (toToken lst)
+    Parser.Advanced.Bytes.token (toToken lst)
 
-toToken : List U8 -> ParserAdvanced.Token Problem
+toToken : List U8 -> Parser.Advanced.Bytes.Token Problem
 toToken = \lst ->
-    {str: lst, prob: Expecting lst}
-# # -- INT ------------------ 
+    { str: lst, prob: Expecting lst }
+# # -- INT ------------------
 
-# # -- FLOAT ------------------ 
+# # -- FLOAT ------------------
 
-# # -- NUMBER ------------------ 
+# # -- NUMBER ------------------
 
-# # -- END ------------------ 
+# # -- END ------------------
 
 end : Parser {}
-end = ParserAdvanced.end ExpectingEnd
+end = Parser.Advanced.Bytes.end ExpectingEnd
 
 # # -- CHOMPED STRINGS -----------
 
 getChompedString : Parser a -> Parser (List U8)
-getChompedString = ParserAdvanced.getChompedString
+getChompedString = Parser.Advanced.Bytes.getChompedString
 
 mapChompedString : (List U8, a -> b), Parser a -> Parser b
-mapChompedString = ParserAdvanced.mapChompedString
-
+mapChompedString = Parser.Advanced.Bytes.mapChompedString
 
 # # -- CHOMP IF -----------
 
-#only consumes one thing. remove newOffset from issubchar?
+# only consumes one thing. remove newOffset from issubchar?
 chompIf : (U8 -> Bool) -> Parser {}
 chompIf = \isGood ->
-    ParserAdvanced.chompIf isGood UnexpectedChar
+    Parser.Advanced.Bytes.chompIf isGood UnexpectedChar
 
 # # -- CHOMP WHILE -----------
 
-#I tried to keep this faithful to the Elm library. But I think this would be better without using isSubChar, because I am kind of passing around another src without need.
+# I tried to keep this faithful to the Elm library. But I think this would be better without using isSubChar, because I am kind of passing around another src without need.
 chompWhile : (U8 -> Bool) -> Parser {}
-chompWhile = ParserAdvanced.chompWhile
-                    
+chompWhile = Parser.Advanced.Bytes.chompWhile
 
 # # -- CHOMP UNTIL -----------
 
 chompUntil : List U8 -> Parser {}
 chompUntil = \str ->
-    ParserAdvanced.chompUntil (toToken str)
-    
-
+    Parser.Advanced.Bytes.chompUntil (toToken str)
 
 chompUntilEndOr : List U8 -> Parser {}
-chompUntilEndOr = 
-    ParserAdvanced.chompUntilEndOr
+chompUntilEndOr =
+    Parser.Advanced.Bytes.chompUntilEndOr
 
 # # -- CONTEXT -----------
 
@@ -228,17 +220,16 @@ chompUntilEndOr =
 # inContext = \con, @Parser parse ->
 #     @Parser \s0 ->
 #         stateInContext =
-#             s0.context 
-#             |> List.prepend {row: s0.row, col: s0.col, context: con} 
-#             |> changeContext s0 
-            
+#             s0.context
+#             |> List.prepend {row: s0.row, col: s0.col, context: con}
+#             |> changeContext s0
+
 #         when parse stateInContext is
 #             Good p a s1 ->
 #                 Good p a (changeContext s0.context s1)
 
 #             Bad _ _ as step ->
 #                 step
-
 
 # changeContext : List (Located c), State c -> State c
 # changeContext = \newContext, s ->
@@ -248,38 +239,34 @@ chompUntilEndOr =
 
 getIndent : Parser Nat
 getIndent =
-  ParserAdvanced.getIndent
+    Parser.Advanced.Bytes.getIndent
 
 withIndent : Nat, Parser a -> Parser a
-withIndent = 
-    ParserAdvanced.withIndent
+withIndent =
+    Parser.Advanced.Bytes.withIndent
 
 # # -- POSITION -----------
 
 # This name is confusing due to my definition of Position.
-getPosition : Parser {row: Nat, col: Nat}
+getPosition : Parser { row : Nat, col : Nat }
 getPosition =
-  ParserAdvanced.getPosition
-
+    Parser.Advanced.Bytes.getPosition
 
 getRow : Parser Nat
 getRow =
-  ParserAdvanced.getRow
-
+    Parser.Advanced.Bytes.getRow
 
 getCol : Parser Nat
 getCol =
-  ParserAdvanced.getCol
-
+    Parser.Advanced.Bytes.getCol
 
 getOffset : Parser Nat
 getOffset =
-  ParserAdvanced.getOffset
-
+    Parser.Advanced.Bytes.getOffset
 
 getSource : Parser (List U8)
 getSource =
-  ParserAdvanced.getSource
+    Parser.Advanced.Bytes.getSource
 
 # # -- LOW LEVEL HELPERS -----------
 
@@ -294,7 +281,7 @@ getSource =
 # posUpdate = \pos, c ->
 #     if c == newLine then
 #         {offset: pos.offset + 1, row: pos.row + 1, col: 1}
-#     else 
+#     else
 #         {pos & offset: pos.offset + 1, col: pos.col + 1}
 
 # #This is missnamed.
@@ -309,50 +296,48 @@ getSource =
 #                 Ok (pos |> posUpdate c)
 #             else
 #                 Err NotFound
-                
+
 #     else
 #         Err NotFound
 
-
-# expect 
+# expect
 #     p = {offset: 0, row: 1, col: 1}
 #     smallLst = Str.toUtf8 "Hell"
 #     bigLst = Str.toUtf8 "Hello there"
 #     pos = Result.withDefault (isSubString smallLst p bigLst) p
 #     pos == {offset: 4, row: 1, col: 5}
 
-# expect 
+# expect
 #     p = {offset: 0, row: 2, col: 4}
 #     smallLst = Str.toUtf8 "Hello\n there"
 #     bigLst = Str.toUtf8 "Hello\n there neighbour"
 #     pos = Result.withDefault (isSubString smallLst p bigLst) p
-#     pos == {offset: 12, row: 3, col: 7} 
+#     pos == {offset: 12, row: 3, col: 7}
 
-# expect 
+# expect
 #     p = {offset: 4, row: 2, col: 5}
 #     smallLst = Str.toUtf8 "now"
 #     bigLst = Str.toUtf8 "Hi\n now"
 #     pos = Result.withDefault (isSubString smallLst p bigLst) p
-#     pos == {offset: 7, row: 2, col: 8} 
+#     pos == {offset: 7, row: 2, col: 8}
 
-# expect 
+# expect
 #     p = {offset: 4, row: 2, col: 5}
 #     smallLst = Str.toUtf8 "now and again"
 #     bigLst = Str.toUtf8 "Hi\n now"
 #     res = (isSubString smallLst p bigLst)
-#     when res is 
-#         Err NotFound -> Bool.true 
-#         _ -> Bool.false  
+#     when res is
+#         Err NotFound -> Bool.true
+#         _ -> Bool.false
 
-# expect 
+# expect
 #     p = {offset: 0, row: 1, col: 1}
 #     smallLst = Str.toUtf8 "ice"
 #     bigLst = Str.toUtf8 "Hello\n there neighbour"
 #     res = (isSubString smallLst p bigLst)
-#     when res is 
-#         Err NotFound -> Bool.true 
-#         _ -> Bool.false          
-
+#     when res is
+#         Err NotFound -> Bool.true
+#         _ -> Bool.false
 
 # isSubChar: (U8 -> Bool), Nat, List U8 -> Result Nat [NotFound, NewLine, OutOfBounds]
 # isSubChar = \predicate, offset, lst ->
@@ -365,30 +350,26 @@ getSource =
 #         Err NotFound
 
 # #TODO
-# isAsciiCode: Nat, Nat, List U8 -> Bool        
-
+# isAsciiCode: Nat, Nat, List U8 -> Bool
 
 # findSubString : List U8, Position, List U8 -> Result Position [EndOfList Position]
 # findSubString = \smallLst, pos, bigLst ->
 #     smallLen = List.len smallLst
 
-#     finalPos = 
+#     finalPos =
 #         bigLst |> List.walkFromUntil pos.offset pos \p,c ->
 #             sbList = List.sublist bigLst {start: p.offset, len: smallLen}
 
 #             newPos = pos |> posUpdate c
 #             if smallLst == sbList then
 #                 Break newPos
-#             else 
-#                 Continue newPos 
+#             else
+#                 Continue newPos
 
 #     if finalPos.offset == List.len bigLst then
 #         Err (EndOfList finalPos)
-#     else 
+#     else
 #         Ok finalPos
-    
-    
-
 
 # # -- VARIABLES -----------
 
