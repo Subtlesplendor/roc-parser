@@ -1,9 +1,12 @@
 interface ParserAdvanced 
-    exposes [run,
+    exposes [Parser,
+             DeadEnd,
+             run,
              succeed,
              problem,
              map,
              map2,
+             fail,
              fromInfo,
              keep,
              skip,
@@ -19,7 +22,23 @@ interface ParserAdvanced
              symbol,
              keyword,
              end,
-             getChompedString]
+             getChompedString,
+             mapChompedString,
+             chompIf,
+             chompWhile,
+             chompUntil,
+             chompUntilEndOr,
+             getIndent,
+             withIndent,
+             token,
+             Token,
+             Step,
+             getPosition,
+             getCol,
+             getRow,
+             getSource,
+             getOffset,
+             inContext]
     imports []
 
 
@@ -339,7 +358,7 @@ chompWhile : (U8 -> Bool) -> Parser c x {}
 chompWhile = \isGood ->
     @Parser \s ->
         finalPos =
-            s.src |> List.walkUntil {offset: s.offset, row: s.row, col: s.col} \pos, c ->
+            s.src |> List.walkUntil {offset: s.offset, row: s.row, col: s.col} \pos, _ ->
                 when isSubChar isGood pos.offset s.src is 
                     Err NewLine ->
                         Continue {offset: pos.offset + 1, row: pos.row + 1, col:1}
@@ -539,6 +558,9 @@ isSubChar = \predicate, offset, lst ->
         Err NewLine
     else
         Err NotFound
+
+#TODO
+#isAsciiCode: Nat, Nat, List U8 -> Bool        
 
 
 findSubString : List U8, Position, List U8 -> Result Position [EndOfList Position]
