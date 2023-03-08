@@ -432,6 +432,31 @@ changeIndent =\newIndent, s ->
 
 # -- POSITION -----------
 
+# This name is confusing due to my definition of Position.
+getPosition : Parser c x {row: Nat, col: Nat}
+getPosition =
+  @Parser \s -> Good Bool.false {row: s.row, col:s.col} s
+
+
+getRow : Parser c x Nat
+getRow =
+  @Parser \s -> Good Bool.false s.row s
+
+
+getCol : Parser c x Nat
+getCol =
+  @Parser \s -> Good Bool.false s.col s
+
+
+getOffset : Parser c x Nat
+getOffset =
+  @Parser \s -> Good Bool.false s.offset s
+
+
+getSource : Parser c x (List U8)
+getSource =
+  @Parser \s -> Good Bool.false s.src s
+
 # -- LOW LEVEL HELPERS -----------
 
 #These are most likely to be optimizable
