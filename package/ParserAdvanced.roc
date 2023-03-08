@@ -408,6 +408,28 @@ changeContext = \newContext, s ->
 
 # -- INDENTATION -----------
 
+
+getIndent : Parser c x Nat
+getIndent =
+  @Parser \s -> Good Bool.false s.indent s
+
+
+
+withIndent : Nat, Parser c x a -> Parser c x a
+withIndent = \newIndent, @Parser parse ->
+    @Parser \s0 ->
+        when parse (changeIndent newIndent s0) is
+            Good p a s1 ->
+                Good p a (changeIndent s0.indent s1)
+
+            Bad p x ->
+                Bad p x
+
+
+changeIndent : Nat, State c -> State c
+changeIndent =\newIndent, s ->
+    { s & indent: newIndent }
+
 # -- POSITION -----------
 
 # -- LOW LEVEL HELPERS -----------
