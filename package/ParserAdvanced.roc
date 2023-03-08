@@ -334,7 +334,29 @@ chompIf = \isGood, expecting ->
 
 # -- CHOMP WHILE -----------
 
+#I tried to keep this faithful to the Elm library. But I think this would be better without using isSubChar, because I am kind of passing around another src without need.
+chompWhile : (U8 -> Bool) -> Parser c x {}
+chompWhile = \isGood ->
+    @Parser \s ->
+        finalPos =
+            s.src |> List.walkUntil {offset: s.offset, row: s.row, col: s.col} \pos, c ->
+                when isSubChar isGood pos.offset s.src is 
+                    Err NewLine ->
+                        Continue {offset: pos.offset + 1, row: pos.row + 1, col:1}
+                    Err _ -> 
+                        Break pos
+                    Ok newOffset ->
+                        Continue {pos & offset: newOffset, col: pos.col + 1}
+        
+        Good (s.offset < finalPos.offset) {} 
+            { s & offset: finalPos.offset,
+                  row: finalPos.row,
+                  col: finalPos.col }
+                    
+
 # -- CHOMP UNTIL -----------
+
+
 
 # -- CONTEXT -----------
 
