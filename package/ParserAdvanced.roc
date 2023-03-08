@@ -17,7 +17,9 @@ interface ParserAdvanced
              buildPrimitiveParser,
              fromState,
              symbol,
-             keyword]
+             keyword,
+             end,
+             getChompedString]
     imports []
 
 
@@ -284,9 +286,36 @@ token = \{str, prob} ->
 
 # -- END ------------------ 
 
+end : x -> Parser c x {}
+end = \x ->
+  @Parser \s ->
+    if List.len s.src == s.offset then
+      Good Bool.false {} s
+    else
+      Bad Bool.false (fromState s x)
+
 # -- CHOMPED STRINGS -----------
 
+getChompedString : Parser c x a -> Parser c x (List U8)
+getChompedString = \parser ->
+  mapChompedString (\s, _ -> s) parser
+
+mapChompedString : (List U8, a -> b), Parser c x a -> Parser c x b
+mapChompedString = \func, @Parser parse ->
+  @Parser \s0 ->
+    when parse s0 is
+        Bad p x ->
+            Bad p x
+
+        Good p a s1 ->
+            expect (s1.offset >= s0.offset)
+            length = Num.toNat (s1.offset - s0.offset) #never negative
+            Good p (func (List.sublist s0.src {start: s0.offset, len: length}) a) s1
+
+
 # -- CHOMP IF -----------
+
+
 
 # -- CHOMP WHILE -----------
 
@@ -372,6 +401,11 @@ isSubChar = \predicate, offset, lst ->
         Err NewLine
     else
         Err NotFound
+
+
+findSubString : List U8, Position, List U8 -> Position
+#findSubString = \smallLst, pos, bigLst ->
+
 
 
 # -- VARIABLES -----------
