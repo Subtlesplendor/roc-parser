@@ -13,3 +13,11 @@ A port of Elm's Parser library to roc, empowered by Roc's type system
       - Accumulate errors bit by bit?
       - combinators for backpassing notation?
       - Clever types for context?
+
+
+## A few ideas
+
+  1. For a generic `List a`, perhaps one should have a more generic position type.
+  2. For sure it would be good to define Position = {...} and use it also within the state.
+  3. Likely it would be good to have a Generic module that only has parser combinators and primitive parsers.
+  
