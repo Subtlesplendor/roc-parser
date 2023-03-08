@@ -371,6 +371,19 @@ chompUntil = \{str, prob} ->
                           col: pos.col }
 
 
+chompUntilEndOr : List U8 -> Parser c x {}
+chompUntilEndOr = \lst ->
+    @Parser \s ->
+        newPos = 
+            when findSubString lst {offset: s.offset, row: s.row, col: s.col} s.src is
+                Err (EndOfList pos) -> pos
+                Ok pos -> pos
+
+        Good (s.offset < newPos.offset) {}
+        { s & offset: newPos.offset,
+            row: newPos.row,
+            col: newPos.col }
+
 # -- CONTEXT -----------
 
 # -- INDENTATION -----------
@@ -378,6 +391,8 @@ chompUntil = \{str, prob} ->
 # -- POSITION -----------
 
 # -- LOW LEVEL HELPERS -----------
+
+#These are most likely to be optimizable
 
 Position : {offset: Nat, row: Nat, col: Nat}
 
