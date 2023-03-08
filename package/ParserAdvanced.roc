@@ -356,6 +356,24 @@ chompWhile = \isGood ->
 
 # -- CHOMP UNTIL -----------
 
+# chompUntil : Token x -> Parser c x {}
+# chompUntil = \{str, prob} ->
+#     @Parser \s ->
+# (newOffset, newRow, newCol) =
+#         findSubString str s.offset s.row s.col s.src
+#     in
+#     if newOffset == -1 then
+#       Bad False (fromInfo newRow newCol expecting s.context)
+
+#     else
+#       Good (s.offset < newOffset) ()
+#         { src = s.src
+#         , offset = newOffset
+#         , indent = s.indent
+#         , context = s.context
+#         , row = newRow
+#         , col = newCol
+#         }
 
 
 # -- CONTEXT -----------
@@ -371,20 +389,26 @@ Position : {offset: Nat, row: Nat, col: Nat}
 newLine: U8
 newLine = 10
 
+posUpdate: Position, U8 -> Position
+posUpdate = \pos, c ->
+    if c == newLine then
+        {offset: pos.offset + 1, row: pos.row + 1, col: 1}
+    else 
+        {pos & offset: pos.offset + 1, col: pos.col + 1}
+
 #This is missnamed.
 isSubString : List U8, Position, List U8 -> Result Position [NotFound, OutOfBounds]
 isSubString =\smallLst, pos, bigLst ->
     if pos.offset + List.len smallLst <= List.len bigLst then
 
-        smallLst |> List.walkTry pos \state, c ->
-            char <- Result.try (List.get bigLst state.offset)
-            when c is
-                x if x != char ->
-                    Err NotFound
-                x if x == newLine ->
-                    Ok {offset: state.offset + 1, row: state.row + 1, col: 1}
-                _ -> 
-                    Ok {state & offset: state.offset + 1, col: state.col+1}
+        smallLst |> List.walkTry pos \p, c ->
+            char <- Result.try (List.get bigLst p.offset)
+
+            if c == char then
+                Ok (pos |> posUpdate c)
+            else
+                Err NotFound
+                
     else
         Err NotFound
 
@@ -440,9 +464,26 @@ isSubChar = \predicate, offset, lst ->
         Err NotFound
 
 
-findSubString : List U8, Position, List U8 -> Position
-#findSubString = \smallLst, pos, bigLst ->
+findSubString : List U8, Position, List U8 -> Result Position [EndOfList Position]
+findSubString = \smallLst, pos, bigLst ->
+    smallLen = List.len smallLst
 
+    finalPos = 
+        bigLst |> List.walkFromUntil pos.offset pos \p,c ->
+            sbList = List.sublist bigLst {start: p.offset, len: smallLen}
+
+            newPos = pos |> posUpdate c
+            if smallLst == sbList then
+                Break newPos
+            else 
+                Continue newPos 
+
+    if finalPos.offset == List.len bigLst then
+        Err (EndOfList finalPos)
+    else 
+        Ok finalPos
+    
+    
 
 
 # -- VARIABLES -----------
