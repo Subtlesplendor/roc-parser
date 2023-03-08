@@ -386,6 +386,26 @@ chompUntilEndOr = \lst ->
 
 # -- CONTEXT -----------
 
+inContext : context, Parser context x a -> Parser context x a
+inContext = \con, @Parser parse ->
+    @Parser \s0 ->
+        stateInContext =
+            s0.context 
+            |> List.prepend {row: s0.row, col: s0.col, context: con} 
+            |> changeContext s0 
+            
+        when parse stateInContext is
+            Good p a s1 ->
+                Good p a (changeContext s0.context s1)
+
+            Bad _ _ as step ->
+                step
+
+
+changeContext : List (Located c), State c -> State c
+changeContext = \newContext, s ->
+    { s & context: newContext }
+
 # -- INDENTATION -----------
 
 # -- POSITION -----------
