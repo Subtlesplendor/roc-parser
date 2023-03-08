@@ -356,24 +356,19 @@ chompWhile = \isGood ->
 
 # -- CHOMP UNTIL -----------
 
-# chompUntil : Token x -> Parser c x {}
-# chompUntil = \{str, prob} ->
-#     @Parser \s ->
-# (newOffset, newRow, newCol) =
-#         findSubString str s.offset s.row s.col s.src
-#     in
-#     if newOffset == -1 then
-#       Bad False (fromInfo newRow newCol expecting s.context)
+chompUntil : Token x -> Parser c x {}
+chompUntil = \{str, prob} ->
+    @Parser \s ->
 
-#     else
-#       Good (s.offset < newOffset) ()
-#         { src = s.src
-#         , offset = newOffset
-#         , indent = s.indent
-#         , context = s.context
-#         , row = newRow
-#         , col = newCol
-#         }
+        when findSubString str {offset:s.offset, row: s.row, col: s.col} s.src is
+            Err (EndOfList pos) ->
+                Bad Bool.false (fromInfo pos.row pos.col prob s.context)
+            
+            Ok pos ->
+                Good (s.offset < pos.offset) {}
+                    { s & offset: pos.offset,
+                          row: pos.row,
+                          col: pos.col }
 
 
 # -- CONTEXT -----------
