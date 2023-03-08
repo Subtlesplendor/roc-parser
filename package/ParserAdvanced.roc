@@ -315,7 +315,22 @@ mapChompedString = \func, @Parser parse ->
 
 # -- CHOMP IF -----------
 
-
+#only consumes one thing. remove newOffset from issubchar?
+chompIf : (U8 -> Bool), x -> Parser c x {}
+chompIf = \isGood, expecting ->
+    @Parser \s ->
+        when isSubChar isGood s.offset s.src is
+            Err NewLine ->  
+                Good Bool.true {}
+                    { s & offset: s.offset + 1,
+                          row: s.row + 1,
+                          col: 1 }
+            Err _ -> 
+                Bad Bool.false (fromState s expecting)
+    
+            Ok newOffset ->
+                Good Bool.true {}
+                    { s & offset: newOffset, col: s.col + 1 }
 
 # -- CHOMP WHILE -----------
 
