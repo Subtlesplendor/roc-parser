@@ -38,7 +38,8 @@ interface ParserAdvanced
              getRow,
              getSource,
              getOffset,
-             inContext]
+             inContext,
+             spaces]
     imports []
 
 
@@ -53,12 +54,15 @@ Parser context problem value :=
 #ParseResult context input problem value :
 #    Result {backtrackable: Backtrackable, value: value, state: State context input} {backtrackable: Backtrackable, errors: List [ParserFailure context problem] }
 
+RawStr: List U8 
+RawChar: U8
+
 PStep context problem value : 
     [Good Bool value (State context),
      Bad Bool (Bag context problem)]
 
 State context :
-  { src : List U8,
+  { src : RawStr,
     offset : Nat,
     indent : Nat,
     context : List (Located context),
@@ -86,9 +90,9 @@ buildPrimitiveParser = \fun ->
 
 #-- RUN ------------------ 
 
-run : Parser c x a, List U8 -> Result a (List (DeadEnd c x))
-run = \(@Parser parse), input ->
-    state = { src: input,
+run : Parser c x a, RawStr -> Result a (List (DeadEnd c x))
+run = \(@Parser parse), str ->
+    state = { src: str,
               offset: 1,
               indent: 1,
               context: [],
@@ -279,7 +283,7 @@ keyword = \{str:kwd, prob: expecting} ->
 
 # -- TOKEN ------------------ 
 
-Token problem : {str : List U8, prob: problem}
+Token problem : {str : RawStr, prob: problem}
 
 token : Token x -> Parser c x {}
 token = \{str, prob} ->
@@ -302,6 +306,100 @@ token = \{str, prob} ->
 # -- FLOAT ------------------ 
 
 # -- NUMBER ------------------ 
+# number
+#   : { int : Result (Int * -> a) x
+#     , hex : Result (Int * -> a) x
+#     , octal : Result (Int *-> a) x
+#     , binary : Result (Int *-> a) x
+#     , float : Result (Float *-> a) x
+#     , invalid : x
+#     , expecting : x
+#     }
+#   -> Parser c x a
+# number = \c ->
+#     @Parser \s ->
+#         # 0
+#         if isUtf8Code 48 s.offset s.src then 
+
+#             zeroOffset = s.offset + 1
+#             baseOffset = zeroOffset + 1
+
+#             # x
+#             if isUtf8Code 120 zeroOffset s.src then
+#                 finalizeInt c.invalid c.hex baseOffset (consumeBase16 baseOffset s.src) s
+#             # o    
+#             else if isUtf8Code 111 zeroOffset s.src then
+#                 finalizeInt c.invalid c.octal baseOffset (consumeBase 8 baseOffset s.src) s
+#             # b    
+#             else if isUtf8Code 98 zeroOffset s.src then
+#                 finalizeInt c.invalid c.binary baseOffset (consumeBase 2 baseOffset s.src) s
+#             else
+#                 finalizeFloat c.invalid c.expecting c.int c.float (zeroOffset, 0) s
+
+#         else
+#             finalizeFloat c.invalid c.expecting c.int c.float (consumeBase 10 s.offset s.src) s
+
+
+# consumeBase : Int -> Int -> String -> (Int, Int)
+# consumeBase =
+#   Elm.Kernel.Parser.consumeBase
+
+
+# consumeBase16 : Int -> String -> (Int, Int)
+# consumeBase16 =
+#   Elm.Kernel.Parser.consumeBase16
+
+
+# finalizeInt : x -> Result x (Int -> a) -> Int -> (Int, Int) -> State c -> PStep c x a
+# finalizeInt invalid handler startOffset (endOffset, n) s =
+#   case handler of
+#     Err x ->
+#       Bad True (fromState s x)
+
+#     Ok toValue ->
+#       if startOffset == endOffset
+#         then Bad (s.offset < startOffset) (fromState s invalid)
+#         else Good True (toValue n) (bumpOffset endOffset s)
+
+
+# bumpOffset : Int -> State c -> State c
+# bumpOffset newOffset s =
+#   { src = s.src
+#   , offset = newOffset
+#   , indent = s.indent
+#   , context = s.context
+#   , row = s.row
+#   , col = s.col + (newOffset - s.offset)
+#   }
+
+
+# finalizeFloat : x -> x -> Result x (Int -> a) -> Result x (Float -> a) -> (Int, Int) -> State c -> PStep c x a
+# finalizeFloat invalid expecting intSettings floatSettings intPair s =
+#   let
+#     intOffset = Tuple.first intPair
+#     floatOffset = consumeDotAndExp intOffset s.src
+#   in
+#   if floatOffset < 0 then
+#     Bad True (fromInfo s.row (s.col - (floatOffset + s.offset)) invalid s.context)
+
+#   else if s.offset == floatOffset then
+#     Bad False (fromState s expecting)
+
+#   else if intOffset == floatOffset then
+#     finalizeInt invalid intSettings s.offset intPair s
+
+#   else
+#     case floatSettings of
+#       Err x ->
+#         Bad True (fromState s invalid)
+
+#       Ok toValue ->
+#         case String.toFloat (String.slice s.offset floatOffset s.src) of
+#           Nothing -> Bad True (fromState s invalid)
+#           Just n -> Good True (toValue n) (bumpOffset floatOffset s)
+
+
+
 
 # -- END ------------------ 
 
@@ -315,11 +413,11 @@ end = \x ->
 
 # -- CHOMPED STRINGS -----------
 
-getChompedString : Parser c x a -> Parser c x (List U8)
+getChompedString : Parser c x a -> Parser c x RawStr
 getChompedString = \parser ->
   mapChompedString (\s, _ -> s) parser
 
-mapChompedString : (List U8, a -> b), Parser c x a -> Parser c x b
+mapChompedString : (RawStr, a -> b), Parser c x a -> Parser c x b
 mapChompedString = \func, @Parser parse ->
   @Parser \s0 ->
     when parse s0 is
@@ -335,7 +433,7 @@ mapChompedString = \func, @Parser parse ->
 # -- CHOMP IF -----------
 
 #only consumes one thing. remove newOffset from issubchar?
-chompIf : (U8 -> Bool), x -> Parser c x {}
+chompIf : (RawChar -> Bool), x -> Parser c x {}
 chompIf = \isGood, expecting ->
     @Parser \s ->
         when isSubChar isGood s.offset s.src is
@@ -354,7 +452,7 @@ chompIf = \isGood, expecting ->
 # -- CHOMP WHILE -----------
 
 #I tried to keep this faithful to the Elm library. But I think this would be better without using isSubChar, because I am kind of passing around another src without need.
-chompWhile : (U8 -> Bool) -> Parser c x {}
+chompWhile : (RawChar -> Bool) -> Parser c x {}
 chompWhile = \isGood ->
     @Parser \s ->
         finalPos =
@@ -390,11 +488,11 @@ chompUntil = \{str, prob} ->
                           col: pos.col }
 
 
-chompUntilEndOr : List U8 -> Parser c x {}
-chompUntilEndOr = \lst ->
+chompUntilEndOr : RawStr -> Parser c x {}
+chompUntilEndOr = \str ->
     @Parser \s ->
         newPos = 
-            when findSubString lst {offset: s.offset, row: s.row, col: s.col} s.src is
+            when findSubString str {offset: s.offset, row: s.row, col: s.col} s.src is
                 Err (EndOfList pos) -> pos
                 Ok pos -> pos
 
@@ -472,7 +570,7 @@ getOffset =
   @Parser \s -> Good Bool.false s.offset s
 
 
-getSource : Parser c x (List U8)
+getSource : Parser c x RawStr
 getSource =
   @Parser \s -> Good Bool.false s.src s
 
@@ -482,23 +580,28 @@ getSource =
 
 Position : {offset: Nat, row: Nat, col: Nat}
 
-newLine: U8
+newLine: RawChar
 newLine = 10
 
-posUpdate: Position, U8 -> Position
+carriageReturn: RawChar
+carriageReturn = 13
+
+space: RawChar
+space = 32
+
+posUpdate: Position, RawChar -> Position
 posUpdate = \pos, c ->
     if c == newLine then
         {offset: pos.offset + 1, row: pos.row + 1, col: 1}
     else 
         {pos & offset: pos.offset + 1, col: pos.col + 1}
 
-#This is missnamed.
-isSubString : List U8, Position, List U8 -> Result Position [NotFound, OutOfBounds]
-isSubString =\smallLst, pos, bigLst ->
-    if pos.offset + List.len smallLst <= List.len bigLst then
+isSubString : RawStr, Position, RawStr -> Result Position [NotFound, OutOfBounds]
+isSubString =\smallStr, pos, bigStr ->
+    if pos.offset + List.len smallStr <= List.len bigStr then
 
-        smallLst |> List.walkTry pos \p, c ->
-            char <- Result.try (List.get bigLst p.offset)
+        smallStr |> List.walkTry pos \p, c ->
+            char <- Result.try (List.get bigStr p.offset)
 
             if c == char then
                 Ok (pos |> posUpdate c)
@@ -511,47 +614,47 @@ isSubString =\smallLst, pos, bigLst ->
 
 expect 
     p = {offset: 0, row: 1, col: 1}
-    smallLst = Str.toUtf8 "Hell"
-    bigLst = Str.toUtf8 "Hello there"
-    pos = Result.withDefault (isSubString smallLst p bigLst) p
+    smallStr = Str.toUtf8 "Hell"
+    bigStr = Str.toUtf8 "Hello there"
+    pos = Result.withDefault (isSubString smallStr p bigStr) p
     pos == {offset: 4, row: 1, col: 5}
 
 expect 
     p = {offset: 0, row: 2, col: 4}
-    smallLst = Str.toUtf8 "Hello\n there"
-    bigLst = Str.toUtf8 "Hello\n there neighbour"
-    pos = Result.withDefault (isSubString smallLst p bigLst) p
+    smallStr = Str.toUtf8 "Hello\n there"
+    bigStr = Str.toUtf8 "Hello\n there neighbour"
+    pos = Result.withDefault (isSubString smallStr p bigStr) p
     pos == {offset: 12, row: 3, col: 7} 
 
 expect 
     p = {offset: 4, row: 2, col: 5}
-    smallLst = Str.toUtf8 "now"
-    bigLst = Str.toUtf8 "Hi\n now"
-    pos = Result.withDefault (isSubString smallLst p bigLst) p
+    smallStr = Str.toUtf8 "now"
+    bigStr = Str.toUtf8 "Hi\n now"
+    pos = Result.withDefault (isSubString smallStr p bigStr) p
     pos == {offset: 7, row: 2, col: 8} 
 
 expect 
     p = {offset: 4, row: 2, col: 5}
-    smallLst = Str.toUtf8 "now and again"
-    bigLst = Str.toUtf8 "Hi\n now"
-    res = (isSubString smallLst p bigLst)
+    smallStr = Str.toUtf8 "now and again"
+    bigStr = Str.toUtf8 "Hi\n now"
+    res = (isSubString smallStr p bigStr)
     when res is 
         Err NotFound -> Bool.true 
         _ -> Bool.false  
 
 expect 
     p = {offset: 0, row: 1, col: 1}
-    smallLst = Str.toUtf8 "ice"
-    bigLst = Str.toUtf8 "Hello\n there neighbour"
-    res = (isSubString smallLst p bigLst)
+    smallStr = Str.toUtf8 "ice"
+    bigStr = Str.toUtf8 "Hello\n there neighbour"
+    res = (isSubString smallStr p bigStr)
     when res is 
         Err NotFound -> Bool.true 
         _ -> Bool.false          
 
 
-isSubChar: (U8 -> Bool), Nat, List U8 -> Result Nat [NotFound, NewLine, OutOfBounds]
-isSubChar = \predicate, offset, lst ->
-    char <- Result.try (List.get lst offset)
+isSubChar: (RawChar -> Bool), Nat, RawStr -> Result Nat [NotFound, NewLine, OutOfBounds]
+isSubChar = \predicate, offset, str ->
+    char <- Result.try (List.get str offset)
     if predicate char then
         Ok (offset + 1)
     else if char==newLine then
@@ -559,25 +662,31 @@ isSubChar = \predicate, offset, lst ->
     else
         Err NotFound
 
-#TODO
-#isAsciiCode: Nat, Nat, List U8 -> Bool        
 
+# isUtf8Code: RawChar, Nat, RawStr -> Bool        
+# isUtf8Code = \code, offset, str ->
+#     when str |> List.get offset is
+#         Err _ -> 
+#             Bool.false
+#         Ok char -> 
+#             code == char
+    
 
-findSubString : List U8, Position, List U8 -> Result Position [EndOfList Position]
-findSubString = \smallLst, pos, bigLst ->
-    smallLen = List.len smallLst
+findSubString : RawStr, Position, RawStr -> Result Position [EndOfList Position]
+findSubString = \smallStr, pos, bigStr ->
+    smallLen = List.len smallStr
 
     finalPos = 
-        bigLst |> List.walkFromUntil pos.offset pos \p,c ->
-            sbList = List.sublist bigLst {start: p.offset, len: smallLen}
+        bigStr |> List.walkFromUntil pos.offset pos \p,c ->
+            subStr = List.sublist bigStr {start: p.offset, len: smallLen}
 
             newPos = pos |> posUpdate c
-            if smallLst == sbList then
+            if smallStr == subStr then
                 Break newPos
             else 
                 Continue newPos 
 
-    if finalPos.offset == List.len bigLst then
+    if finalPos.offset == List.len bigStr then
         Err (EndOfList finalPos)
     else 
         Ok finalPos
@@ -591,6 +700,9 @@ findSubString = \smallLst, pos, bigLst ->
 
 # -- WHITESPACE -----------
 
+spaces : Parser c x {}
+spaces =
+  chompWhile (\c -> c == space || c == newLine || c == carriageReturn)
 
 
 
