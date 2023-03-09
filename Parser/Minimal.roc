@@ -7,24 +7,32 @@ interface Parser.Minimal
              ]
     imports []
 
+## A minimal parser library. 
 
-# -- PARSERS ------------------ 
+## The parser parses lists of `input` and returns a `value`.
+
+## The parser operates by moving a cursor along the list. The input is never consumed.
+
+
+# -- TYPES ------------------ 
+
+Parser input value := 
+    State input -> PResult input value
 
 State input : { src: List input, offset: Nat }
 
 PResult input value : Result {val: value, state: State input} Str
 
-Parser input value := 
-    State input -> PResult input value
 
+# -- OPERATING ------------
+
+## Construct a parser from a parser-function.
 buildPrimitiveParser: (State i -> PResult i v) -> Parser i v
 buildPrimitiveParser = \f ->
     @Parser f
 
 
-
-# -- OPERATING ------------
-
+## Run a parser and get a Result.
 run: Parser i v, List i -> Result v Str
 run = \@Parser parse, src ->
     parse {src, offset: 0} 
@@ -146,6 +154,7 @@ ignore = \parser ->
 
 # ---- INTERNAL HELPER FUNCTIONS -------
 
+#Helper function for many and oneOrMore
 manyImpl : Parser i a, List a, State i -> PResult i (List a)
 manyImpl = \@Parser parser, vals, s ->
     when parser s is
