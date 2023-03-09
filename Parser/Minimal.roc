@@ -1,9 +1,10 @@
 interface Parser.Minimal 
     exposes [Parser, #Types
              buildPrimitiveParser, run, #Operating
-             succeed, problem, #Primitives
+             succeed, problem, end, #Primitives
              map, map2, map3, keep, skip, andThen, #Combinators
-             lazy, many, oneOrMore, alt, oneOf, between, sepBy, ignore #Combinators
+             lazy, many, oneOrMore, alt, oneOf, between, sepBy, ignore, #Combinators
+             next, nextIf, nextWhile #Low level
              ]
     imports []
 
@@ -21,7 +22,7 @@ Parser input value :=
 
 State input : { src: List input, offset: Nat }
 
-PResult input value : Result {val: value, state: State input} Str
+PResult input value : Result {val: value, state: State input} [OutOfBounds, Fail, Str]
 
 
 # -- OPERATING ------------
@@ -33,7 +34,7 @@ buildPrimitiveParser = \f ->
 
 
 ## Run a parser and get a Result.
-run: Parser i v, List i -> Result v Str
+run: Parser i v, List i -> Result v [OutOfBounds, Fail, Str]
 run = \@Parser parse, src ->
     parse {src, offset: 0} 
     |> Result.map .val
@@ -50,7 +51,15 @@ succeed = \val ->
 #fail
 problem : Parser * *
 problem = 
-     @Parser \_ -> Err "Problem"
+     @Parser \_ -> Err Fail
+
+end: Parser i {}
+end = 
+    @Parser \state ->
+        if state.offset == List.len state.src then
+            Ok {val: {}, state}
+        else
+            Err Fail     
 
 # -- COMBINATORS ----------
 
@@ -94,9 +103,9 @@ andThen = \@Parser firstParser, parserBuilder ->
 alt : Parser i v, Parser i v -> Parser i v
 alt = \@Parser first, @Parser second ->
     @Parser \state ->
-        firstErr <- Result.onErr (first state)
+        _ <- Result.onErr (first state)
         secondErr <- Result.onErr (second state)
-        Err "\(firstErr) or \(secondErr)"
+        Err secondErr
 
 oneOf : List (Parser i v) -> Parser i v
 oneOf = \parsers ->
@@ -125,8 +134,8 @@ many = \parser ->
 oneOrMore : Parser i v -> Parser i (List v)
 oneOrMore = \@Parser parser ->
     @Parser \s ->
-        {val, state} <- Result.try (parser s)
-        manyImpl (@Parser parser) [val] state      
+        {val, state} <- Result.try (parser s) 
+        manyImpl (@Parser parser) [val] state       
 
 ## Runs a parser for an 'opening' delimiter, then your main parser, then the 'closing' delimiter,
 ## and only returns the result of your main parser.
@@ -148,8 +157,35 @@ ignore : Parser i v -> Parser i {}
 ignore = \parser ->
     map parser (\_ -> {})        
 
+# ---- LOW LEVEL FUNCTIONS -------
 
+next: Parser i {}
+next =
+    @Parser \s ->
+        _ <- Result.try (s.src |> List.get s.offset)
+        Ok {val: {}, state: {s & offset: s.offset + 1}}
 
+nextIf: (i -> Bool) -> Parser i {}
+nextIf = \isGood ->
+    @Parser \s ->
+        c <- Result.try (s.src |> List.get s.offset)
+        if isGood c then
+            Ok {val: {}, state: {s & offset: s.offset + 1}}
+        else 
+            Err Fail
+
+#future ref: 
+#nextWhile: (State i, i -> State i), (i -> Bool) -> Parser i {}
+nextWhile: (i -> Bool) -> Parser i {}
+nextWhile = \isGood ->
+    @Parser \s ->
+        pos = s.offset
+        finalPos = s.src |> List.walkFromUntil s.offset pos \p, c ->
+            if isGood c then
+                Continue (p + 1)
+            else
+                Break p
+        Ok {val: {}, state: {s & offset: finalPos}}
 
 
 # ---- INTERNAL HELPER FUNCTIONS -------
