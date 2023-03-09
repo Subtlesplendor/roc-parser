@@ -1,4 +1,4 @@
-interface Parser.Advanced.Minimal 
+interface Parser.Minimal 
     exposes [Parser, #Types
              buildPrimitiveParser, run, #Operating
              succeed, problem, #Primitives
