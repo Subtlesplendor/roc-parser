@@ -1,10 +1,12 @@
 interface Parser.Minimal 
     exposes [Parser, #Types
-             buildPrimitiveParser, run, #Operating
+             #buildPrimitiveParser,
+             run, #Operating
              succeed, problem, end, #Primitives
              map, map2, map3, keep, skip, andThen, #Combinators
              lazy, many, oneOrMore, alt, oneOf, between, sepBy, ignore, #Combinators
-             next, nextIf, nextWhile #Low level
+             one, oneIf, # Parsers
+             next, nextIf, nextWhile, getChompedSource #Low level
              ]
     imports []
 
@@ -28,9 +30,9 @@ PResult input value : Result {val: value, state: State input} [OutOfBounds, Fail
 # -- OPERATING ------------
 
 ## Construct a parser from a parser-function.
-buildPrimitiveParser: (State i -> PResult i v) -> Parser i v
-buildPrimitiveParser = \f ->
-    @Parser f
+# buildPrimitiveParser: (State i -> PResult i v) -> Parser i v
+# buildPrimitiveParser = \f ->
+#     @Parser f
 
 
 ## Run a parser and get a Result.
@@ -38,7 +40,6 @@ run: Parser i v, List i -> Result v [OutOfBounds, Fail, Str]
 run = \@Parser parse, src ->
     parse {src, offset: 0} 
     |> Result.map .val
-
 
 
 # -- PRIMITIVES -----------
@@ -173,6 +174,35 @@ nextIf = \isGood ->
             Ok {val: {}, state: {s & offset: s.offset + 1}}
         else 
             Err Fail
+
+one: Parser i i 
+one =
+    @Parser \s ->
+        c <- Result.try (s.src |> List.get s.offset)
+        Ok {val: c, state: {s & offset: s.offset + 1}}
+
+oneIf: (i -> Bool) -> Parser i i 
+oneIf = \isGood ->
+    @Parser \s ->
+        c <- Result.try (s.src |> List.get s.offset)
+        if isGood c then
+            Ok {val: c, state: {s & offset: s.offset + 1}}
+        else 
+            Err Fail      
+
+# Might be able to write a more efficient version than this?
+# Bad name?
+getChompedSource : Parser i * -> Parser i (List i)
+getChompedSource = \@Parser parse ->
+    @Parser \s0 ->
+        {val: _, state: s1} <- Result.try (parse s0) 
+        when s1.offset - s0.offset is
+            x if x>= 0 ->
+                length = x |> Num.toNat
+                Ok {val: s0.src |> List.sublist {start: s0.offset, len: length}, 
+                    state: s1}
+            _ ->
+                Err Fail
 
 #future ref: 
 #nextWhile: (State i, i -> State i), (i -> Bool) -> Parser i {}

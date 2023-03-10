@@ -1,20 +1,22 @@
 app "example"
     packages {
         cli: "https://github.com/roc-lang/basic-cli/releases/download/0.2.0/8tCohJeXMBUnjo_zdMq0jSaqdYoCWJkWazBd4wa8cQU.tar.br",
-        parser: "../package/main.roc",
+        #parser: "../package/main.roc",
     }
     imports [
         cli.Stdout,
         cli.Stderr,
-        parser.ParserCore.{ Parser, buildPrimitiveParser, many },
-        parser.ParserStr.{ parseStr },
+        Parser.Minimal.{ skip, succeed, run, next, oneOf, many },
+        ExampleParsers.Minimal.MinimalStr.{ Parser, char }
+        #parser.ParserCore.{ Parser, buildPrimitiveParser, many },
+        #parser.ParserStr.{ parseStr },
     ]
     provides [main] to cli
 
 main =
-    lettersInput = "AAAiBByAABBwBtCCCiAyArBBx"
+    lettersInput = "AAAiBByAABBwBtCCCiAyArBBx" |> Str.toUtf8
     ifLetterA = \l -> l == A
-    when parseStr (many letterParser) lettersInput is
+    when run (many letterParser) lettersInput is
         Ok letters ->
             letters
             |> List.keepIf ifLetterA
@@ -27,29 +29,39 @@ main =
 
 Letter : [A, B, C, Other]
 
-letterParser : Parser (List U8) Letter
+parseA : Parser Letter
+parseA = 
+    succeed A
+    |> skip (char 'A')
+
+parseB : Parser Letter
+parseB = 
+    succeed B
+    |> skip (char 'B')
+
+parseC : Parser Letter
+parseC = 
+    succeed C
+    |> skip (char 'C')
+
+parseOther : Parser Letter
+parseOther = 
+    succeed Other
+    |> skip next        
+
+letterParser : Parser Letter
 letterParser =
-    input <- buildPrimitiveParser
+    oneOf [parseA, parseB, parseC, parseOther]
 
-    valResult =
-        when input is
-            [] -> Err (ParsingFailure "Nothing to parse")
-            ['A', ..] -> Ok A
-            ['B', ..] -> Ok B
-            ['C', ..] -> Ok C
-            _ -> Ok Other
-
-    valResult
-    |> Result.map \val -> { val, input: List.dropFirst input }
 
 expect
-    input = "B"
+    input = Str.toUtf8 "B"
     parser = letterParser
-    result = parseStr parser input
+    result = run parser input
     result == Ok B
 
 expect
-    input = "BCXA"
+    input = Str.toUtf8 "BCXA"
     parser = many letterParser
-    result = parseStr parser input
+    result = run parser input
     result == Ok [B, C, Other, A]
