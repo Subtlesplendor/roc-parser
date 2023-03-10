@@ -197,7 +197,7 @@ getChompedSource = \@Parser parse ->
     @Parser \s0 ->
         {val: _, state: s1} <- Result.try (parse s0) 
         when s1.offset - s0.offset is
-            x if x>= 0 ->
+            x if x >= 0 ->
                 length = x |> Num.toNat
                 Ok {val: s0.src |> List.sublist {start: s0.offset, len: length}, 
                     state: s1}
