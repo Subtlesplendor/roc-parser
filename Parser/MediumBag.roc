@@ -1,12 +1,12 @@
-interface Parser.Medium 
+interface Parser.MediumBag 
     exposes [Parser, #Types
-             buildPrimitiveParser,
-             run, #Operating
-             const, fail, problem, end, #Primitives
-             map, map2, map3, keep, skip, andThen, #Combinators
-             lazy, many, oneOrMore, alt, oneOf, between, sepBy, ignore, #Combinators
-             one, oneIf, # Parsers
-             next, nextIf, nextWhile, getChompedSource #Low level
+             #buildPrimitiveParser,
+             #run, #Operating
+             #const, fail, problem, end, #Primitives
+             #map, map2, map3, keep, skip, andThen, #Combinators
+             #lazy, many, oneOrMore, alt, oneOf, between, sepBy, ignore, #Combinators
+             #one, oneIf, # Parsers
+             #next, nextIf, nextWhile, getChompedSource #Low level
              ]
     imports []
 
@@ -20,35 +20,43 @@ interface Parser.Medium
 # -- TYPES ------------------ 
 
 Parser context input problem value := 
-    State context input -> PResult context input problem value
+    State context input -> PStep context input problem value
 
-State context input : { src: List input, offset: Nat, context: List context }
+State context input : { src: List input, offset: Nat, contextStack: List context }
 
-Success context input value : {val: value, state: State context input}
-Failure context problem : [OutOfBounds,
-                           ExpectingEnd,
-                           Neither,
-                           #Tree (Failure context problem),
-                           FailAt Nat, 
-                           FailWith context,
-                           Problem problem]
+Good context input value : {val: value, state: State context input}
+Bad context problem : {bag: Bag context problem}
 
-PResult context input problem value : 
-    Result (Success context input value) (Failure context problem)
+Bag c p : [Empty, 
+           AddRight (Bag c p) (DeadEnd c p), 
+           Append (Bag c p) (Bag c p) ]
+
+Problem p : [OutOfBounds,
+             ExpectingEnd,
+             FailAt Nat]p
+             
+
+DeadEnd c p : {offset: Nat, problem: Problem p, contextStack: List c}
+
+PStep context input problem value : 
+    Result (Good context input value) (Bad context problem)
 
 
 # -- OPERATING ------------
 
 # Construct a parser from a parser-function.
-buildPrimitiveParser: (State c i -> PResult c i p v) -> Parser c i p v
+buildPrimitiveParser: (State c i -> PStep c i p v) -> Parser c i p v
 buildPrimitiveParser = \f ->
         @Parser f
 
 # Run a parser and get a Result.
-run: Parser c i p v, List i-> Result v (Failure c p)
+run: Parser c i p v, List i-> Result v (List (DeadEnd c p))
 run = \@Parser parse, src ->
-    parse {src, offset: 0, context: []} 
-    |> Result.map .val
+    when parse {src, offset: 0, contextStack: []} is
+        Ok {val, state: _} ->
+            Ok val
+        Err {bag} ->
+            Err (bagToList bag [])
 
 
 # -- PRIMITIVES -----------
@@ -57,13 +65,13 @@ const : v -> Parser * * * v
 const = \val ->
     @Parser \state -> Ok {val, state}
 
-problem : p -> Parser * * p *
+problem : Problem p -> Parser c i p v
 problem = \p -> 
-     @Parser \_ -> Err (Problem p)
+     @Parser \s -> Err {bag:(fromState s p)}
 
 fail : Parser * * p *
 fail = 
-    @Parser \s -> Err (FailAt s.offset)
+    @Parser \s -> Err {bag: Empty}
 
 end: Parser * * * {}
 end = 
@@ -71,9 +79,9 @@ end =
         if state.offset == List.len state.src then
             Ok {val: {}, state}
         else
-            Err ExpectingEnd     
+            Err {bag: fromState state ExpectingEnd}    
 
-# -- COMBINATORS ----------
+# # -- COMBINATORS ----------
 
 map: Parser c i p a, (a -> b) -> Parser c i p b
 map = \@Parser parse, f ->
@@ -117,9 +125,9 @@ andThen = \@Parser firstParser, parserBuilder ->
 alt : Parser c i p v, Parser c i p v -> Parser c i p v
 alt = \@Parser first, @Parser second ->
     @Parser \state ->
-        _ <- Result.onErr (first state)
-        _ <- Result.onErr (second state)
-        Err (FailAt state.offset)
+        {bag: bag1} <- Result.onErr (first state)
+        {bag: bag2} <- Result.onErr (second state)
+        Err {bag: Append bag1 bag2}
 
 oneOf : List (Parser c i p v) -> Parser c i p v
 oneOf = \parsers ->
@@ -173,68 +181,86 @@ ignore = \parser ->
 
 # ---- LOW LEVEL FUNCTIONS -------
 
-next: Parser c i * {}
-next =
-    @Parser \s ->
-        _ <- Result.try (s.src |> List.get s.offset)
-        Ok {val: {}, state: {s & offset: s.offset + 1} }
+# next: Parser c i * {}
+# next =
+#     @Parser \s ->
+#         _ <- Result.try (s.src |> List.get s.offset)
+#         Ok {val: {}, state: {s & offset: s.offset + 1} }
 
-nextIf: (i -> Bool) -> Parser c i * {}
-nextIf = \isGood ->
-    @Parser \s ->
-        char <- Result.try (s.src |> List.get s.offset)
-        if isGood char then
-            Ok {val: {}, state: {s & offset: s.offset + 1}}
-        else 
-            Err (FailAt s.offset)
+# nextIf: (i -> Bool) -> Parser c i * {}
+# nextIf = \isGood ->
+#     @Parser \s ->
+#         char <- Result.try (s.src |> List.get s.offset)
+#         if isGood char then
+#             Ok {val: {}, state: {s & offset: s.offset + 1}}
+#         else 
+#             Err {bag: fromState s (FailAt s.offset)}
 
-one: Parser c i * i 
-one =
-    @Parser \s ->
-        char <- Result.try (s.src |> List.get s.offset)
-        Ok {val: char, state: {s & offset: s.offset + 1} }
+# one: Parser c i * i 
+# one =
+#     @Parser \s ->
+#         char <- Result.try (s.src |> List.get s.offset)
+#         Ok {val: char, state: {s & offset: s.offset + 1} }
 
-oneIf: (i -> Bool) -> Parser c i * i 
-oneIf = \isGood ->
-    @Parser \s ->
-        char <- Result.try (s.src |> List.get s.offset)
-        if isGood char then
-            Ok {val: char, state: {s & offset: s.offset + 1} }
-        else 
-            Err (FailAt s.offset)  
+# oneIf: (i -> Bool) -> Parser c i * i 
+# oneIf = \isGood ->
+#     @Parser \s ->
+#         char <- Result.try (s.src |> List.get s.offset)
+#         if isGood char then
+#             Ok {val: char, state: {s & offset: s.offset + 1} }
+#         else 
+#             Err (FailAt s.offset)  
 
-# Might be able to write a more efficient version than this?
-# Bad name?
-getChompedSource : Parser c i p * -> Parser c i p (List i)
-getChompedSource = \@Parser parse ->
-    @Parser \s0 ->
-        {val: _, state: s1} <- Result.try (parse s0) 
-        when s1.offset - s0.offset is
-            x if x >= 0 ->
-                length = x |> Num.toNat
-                Ok {val: s0.src |> List.sublist {start: s0.offset, len: length}, 
-                    state: s1}
-            _ ->
-                Err OutOfBounds # Only happens if the parser moves backwards
+# # Might be able to write a more efficient version than this?
+# # Bad name?
+# getChompedSource : Parser c i p * -> Parser c i p (List i)
+# getChompedSource = \@Parser parse ->
+#     @Parser \s0 ->
+#         {val: _, state: s1} <- Result.try (parse s0) 
+#         when s1.offset - s0.offset is
+#             x if x >= 0 ->
+#                 length = x |> Num.toNat
+#                 Ok {val: s0.src |> List.sublist {start: s0.offset, len: length}, 
+#                     state: s1}
+#             _ ->
+#                 Err OutOfBounds # Only happens if the parser moves backwards
 
-#future ref: 
-#nextWhile: (State i, i -> State i), (i -> Bool) -> Parser i {}
-nextWhile: (i -> Bool) -> Parser c i * {}
-nextWhile = \isGood ->
-    @Parser \s ->
-        initialPos = s.offset
-        finalPos = s.src |> List.walkFromUntil s.offset initialPos \p, c ->
-            if isGood c then
-                Continue (p + 1)
-            else
-                Break p
-        Ok {val: {}, state: {s & offset: finalPos}}
+# #future ref: 
+# #nextWhile: (State i, i -> State i), (i -> Bool) -> Parser i {}
+# nextWhile: (i -> Bool) -> Parser c i * {}
+# nextWhile = \isGood ->
+#     @Parser \s ->
+#         initialPos = s.offset
+#         finalPos = s.src |> List.walkFromUntil s.offset initialPos \p, c ->
+#             if isGood c then
+#                 Continue (p + 1)
+#             else
+#                 Break p
+#         Ok {val: {}, state: {s & offset: finalPos}}
 
 
-# ---- INTERNAL HELPER FUNCTIONS -------
+# # ---- INTERNAL HELPER FUNCTIONS -------
+
+#Could this list be reversed? I.e. could one use append instead of prepend? That would be more performant.
+bagToList : Bag c p, List (DeadEnd c p) -> List (DeadEnd c p)
+bagToList = \bag, list ->
+    when bag is
+        Empty ->
+            list
+        
+        AddRight bag1 x ->
+            bag1 |> bagToList (list |> List.prepend x)
+        
+        Append bag1 bag2 ->
+            bag1 |> bagToList (bag2 |> bagToList list)
+
+fromState : State c *, Problem p -> Bag c p
+fromState = \s, p ->
+  AddRight Empty {offset: s.offset, problem: p, contextStack: s.contextStack}          
+
 
 #Helper function for many and oneOrMore
-manyImpl : Parser c i p a, List a, State c i -> PResult c i p (List a)
+manyImpl : Parser c i p a, List a, State c i -> PStep c i p (List a)
 manyImpl = \@Parser parser, vals, s ->
     when parser s is
         Err _ ->
