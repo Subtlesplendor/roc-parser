@@ -1,6 +1,6 @@
-interface Parser.Full 
+interface Parser.FullBag 
     exposes [Parser, #Types
-             buildPrimitiveParser,
+             #buildPrimitiveParser,
              #run, #Operating
              #const, fail, problem, end, #Primitives
              #map, map2, map3, keep, skip, andThen, #Combinators
@@ -20,31 +20,41 @@ interface Parser.Full
 # -- TYPES ------------------ 
 
 Parser context input problem value := 
-    State context input -> PResult context input problem value
+    State context input -> PStep context input problem value
 
-State context input : { src: List input, offset: Nat, context: context }
+State context input : { src: List input, offset: Nat, context: List (Located context) }
 
-Success context input value : 
-    {val: value, backtrackable: Backtrackable, state: State context input}
-Failure context problem : { backtrackable: Backtrackable,
-                            parsingError: 
-                                [OutOfBounds,
-                                ExpectingEnd,
-                                Neither,
-                                #Tree (Failure context problem),
-                                FailAt context, 
-                                Problem problem] }
+Located context: {offset: Nat, context: context}
 
+
+Good context input value : {val: value, state: State context input, backtrackable: Backtrackable}
+Bad context problem : {bag: Bag context problem, backtrackable: Backtrackable}
+
+Bag c p : [Empty, 
+           AddRight (Bag c p) (DeadEnd c p), 
+           Append (Bag c p) (Bag c p) ]
+
+Problem p : [OutOfBounds,
+             ExpectingEnd,
+             FailAt Nat]p
+             
+
+DeadEnd c p : {offset: Nat, problem: Problem p, contextStack: List (Located c)}
+
+PStep context input problem value : 
+    Result (Good context input value) (Bad context problem)
 
 
 Backtrackable : [Yes, No]
 
+and: Backtrackable, Backtrackable -> Backtrackable
 and = \b1, b2 -> 
     when (b1, b2) is
         (No, _) -> No
         (_, No) -> No
         _ -> Yes
 
+or: Backtrackable, Backtrackable -> Backtrackable
 or = \b1, b2 -> 
     when (b1, b2) is
         (Yes, _) -> Yes
@@ -53,41 +63,39 @@ or = \b1, b2 ->
             
 
 
-PResult context input problem value : 
-    Result (Success context input value) (Failure context problem)
-
-
-try: PResult c i p a, (Success c i a -> PResult c i p b) -> PResult c i p b
+try: PStep c i p a, (Good c i a -> PStep c i p b) -> PStep c i p b
 try = \res, callback ->
     step <- Result.try res
     when callback step is
         Ok {val: b, state: s2, backtrackable: b2} ->
             Ok {val: b, state: s2, backtrackable: step.backtrackable |> and b2}
-        Err {parsingError: err2, backtrackable: b2} ->
-            Err {parsingError: err2, backtrackable: step.backtrackable |> and b2}
+        Err {bag: bag2, backtrackable: b2} ->
+            Err {bag: bag2, backtrackable: step.backtrackable |> and b2}
 
-onFail: PResult c i p a, (Failure c p -> PResult c i p a) -> PResult c i p a
+onFail: PStep c i p a, (Bad c p -> PStep c i p a) -> PStep c i p a
 onFail = \res, callback ->
     err <- Result.onErr res
     when callback err is
         Ok {val: b, state: s2, backtrackable: b2} ->
             Ok {val: b, state: s2, backtrackable: err.backtrackable |> and b2}
-        Err {parsingError: err2, backtrackable: b2} ->
-            Err {parsingError: err2, backtrackable: err.backtrackable |> and b2}
+        Err {bag: bag2, backtrackable: b2} ->
+            Err {bag: Append err.bag bag2, backtrackable: err.backtrackable |> and b2}
 
 # -- OPERATING ------------
 
 # Construct a parser from a parser-function.
-buildPrimitiveParser: (State c i -> PResult c i p v) -> Parser c i p v
+buildPrimitiveParser: (State c i -> PStep c i p v) -> Parser c i p v
 buildPrimitiveParser = \f ->
-        @Parser f
+        @Parser f        
 
 # Run a parser and get a Result.
-run: Parser c i p v, c, List i-> Result v (Failure c p)
+run: Parser c i p v, c, List i-> Result v (List (DeadEnd c p))
 run = \@Parser parse, con, src ->
-    parse {src, offset: 0, context: con} 
-    |> Result.map .val
-
+    when parse {src, offset: 0, context: []} is
+        Ok good ->
+            Ok good.val
+        Err bad ->
+            Err (bad.bag |> bagToList [])
 
 # -- PRIMITIVES -----------
 
@@ -95,15 +103,13 @@ const : v -> Parser * * * v
 const = \val ->
     @Parser \state -> Ok {val, state, backtrackable: Yes}
 
-problem : p -> Parser * * p *
+problem : Problem p -> Parser c i p v
 problem = \p -> 
-     @Parser \_ -> Err {parsingError: Problem p,
-                        backtrackable: Yes}
+     @Parser \s -> Err {bag:(fromState s p), backtrackable: Yes}
 
 fail : Parser * * p *
 fail = 
-    @Parser \s -> Err { parsingError: FailAt s.context,
-                        backtrackable: Yes}
+    @Parser \s -> Err {bag: Empty, backtrackable: Yes}
 
 end: Parser * * * {}
 end = 
@@ -111,9 +117,10 @@ end =
         if state.offset == List.len state.src then
             Ok {val: {}, state, backtrackable: Yes}
         else
-            Err {parsingError: ExpectingEnd, backtrackable: Yes}     
+            Err {bag: fromState state ExpectingEnd, backtrackable: Yes}     
 
-# # -- COMBINATORS ----------
+
+# -- COMBINATORS ----------
 
 map: Parser c i p a, (a -> b) -> Parser c i p b
 map = \@Parser parser, f ->
@@ -158,9 +165,12 @@ andThen = \@Parser firstParser, parserBuilder ->
 alt : Parser c i p v, Parser c i p v -> Parser c i p v
 alt = \@Parser first, @Parser second ->
     @Parser \state ->
-        {parsingError: _, backtrackable: b1} <- onFail (first state)
-        {parsingError: _, backtrackable: b2} <- onFail (second state)
-        Err {parsingError: FailAt state.context, backtrackable: b1 |> and b2}
+        {bag: bag1, backtrackable: b1} <- onFail (first state)
+        if b1 == No then 
+            Err {bag: bag1, backtrackable: b1}
+        else
+            {bag: bag2, backtrackable: b2} <- onFail (second state)
+            Err {bag: Append bag1 bag2, backtrackable: b1 |> and b2}
 
 oneOf : List (Parser c i p v) -> Parser c i p v
 oneOf = \parsers ->
@@ -172,6 +182,8 @@ lazy = \thunk ->
     const {}
     |> andThen thunk        
 
+
+# How should this work with backtrackable?
 
 ## A parser which runs the element parser *zero* or more times on the input,
 ## returning a list containing all the parsed elements.
@@ -189,100 +201,242 @@ many = \parser ->
 oneOrMore : Parser c i p v -> Parser c i p (List v)
 oneOrMore = \@Parser parser ->
     @Parser \s ->
-        {val, state, backtrackable: _} <- try (parser s) 
+        {val, state, backtrackable: _} <- try (parser s)
         manyImpl (@Parser parser) [val] state       
 
-# ## Runs a parser for an 'opening' delimiter, then your main parser, then the 'closing' delimiter,
-# ## and only returns the result of your main parser.
-# ##
-# ## Useful to recognize structures surrounded by delimiters (like braces, parentheses, quotes, etc.)
-# ##
-# ## >>> betweenBraces  = \parser -> parser |> between (scalar '[') (scalar ']')
-# between : Parser c i p v, Parser c i p *, Parser c i p * -> Parser c i p v
-# between = \parser, open, close ->
-#     map3 open parser close (\_, val, _ -> val)            
+## Runs a parser for an 'opening' delimiter, then your main parser, then the 'closing' delimiter,
+## and only returns the result of your main parser.
+##
+## Useful to recognize structures surrounded by delimiters (like braces, parentheses, quotes, etc.)
+##
+## >>> betweenBraces  = \parser -> parser |> between (scalar '[') (scalar ']')
+between : Parser c i p v, Parser c i p *, Parser c i p * -> Parser c i p v
+between = \parser, open, close ->
+    map3 open parser close (\_, val, _ -> val)            
 
-# sepBy : Parser c i p v, Parser c i p * -> Parser c i p (List v)
-# sepBy = \parser, separator ->
-#     alt (sepBy1 parser separator) (const [])
+sepBy : Parser c i p v, Parser c i p * -> Parser c i p (List v)
+sepBy = \parser, separator ->
+    alt (sepBy1 parser separator) (const [])
 
 
-# # ## Creates a new parser that ignores the result of the input parser, but propagates the state.
-# ignore : Parser c i p v -> Parser c i p {}
-# ignore = \parser ->
-#     map parser (\_ -> {})        
+# ## Creates a new parser that ignores the result of the input parser, but propagates the state.
+ignore : Parser c i p v -> Parser c i p {}
+ignore = \parser ->
+    map parser (\_ -> {})        
 
-# # ---- LOW LEVEL FUNCTIONS -------
+# ---- LOW LEVEL FUNCTIONS -------
 
-# next: (c, i -> c) -> Parser c i * {}
-# next = \updateWith ->
+# next: Parser c i * {}
+# next =
 #     @Parser \s ->
 #         char <- Result.try (s.src |> List.get s.offset)
-#         Ok {val: {}, state: {s & offset: s.offset + 1, 
-#                                  context: s.context |> updateWith char } }
+#         Ok {val: {}, state: {s & offset: s.offset + 1} }
 
-# nextIf: (c, i -> c), (i -> Bool) -> Parser c i * {}
-# nextIf = \updateWith, isGood ->
-#     @Parser \s ->
-#         char <- Result.try (s.src |> List.get s.offset)
-#         if isGood char then
-#             Ok {val: {}, state: {s & offset: s.offset + 1,
-#                                      context: s.context |> updateWith char}}
-#         else 
-#             Err (FailAt s.context)
 
-# one: (c, i -> c) -> Parser c i * i 
-# one = \updateWith ->
-#     @Parser \s ->
-#         char <- Result.try (s.src |> List.get s.offset)
-#         Ok {val: char, state: {s & offset: s.offset + 1,
-#                                    context: s.context |> updateWith char} }
 
-# oneIf: (c, i -> c), (i -> Bool) -> Parser c i * i 
-# oneIf = \updateWith, isGood ->
-#     @Parser \s ->
-#         char <- Result.try (s.src |> List.get s.offset)
-#         if isGood char then
-#             Ok {val: char, state: {s & offset: s.offset + 1,
-#                                        context: s.context |> updateWith char} }
-#         else 
-#             Err (FailAt s.context)  
 
-# # Might be able to write a more efficient version than this?
-# # Bad name?
-# getChompedSource : Parser c i p * -> Parser c i p (List i)
-# getChompedSource = \@Parser parse ->
-#     @Parser \s0 ->
-#         {val: _, state: s1} <- Result.try (parse s0) 
-#         when s1.offset - s0.offset is
-#             x if x >= 0 ->
-#                 length = x |> Num.toNat
-#                 Ok {val: s0.src |> List.sublist {start: s0.offset, len: length}, 
-#                     state: s1}
-#             _ ->
-#                 Err OutOfBounds # Only happens if the parser moves backwards
+chompIf: (i -> Bool), Problem p -> Parser c i p {}
+chompIf = \isGood, expecting ->
+    @Parser \s ->
+        when s.src |> List.get s.offset is
+            Ok i ->
+                if i |> isGood then
+                    Ok {val: {}, state: {s & offset: s.offset + 1}, backtrackable: No}
+                else
+                    Err {bag: fromState s expecting, backtrackable:Yes}
+            
+            Err OutOfBounds ->
+                Err {bag: fromState s OutOfBounds, backtrackable: Yes}        
 
-# #future ref: 
-# #nextWhile: (State i, i -> State i), (i -> Bool) -> Parser i {}
-# nextWhile: (c, i -> c), (i -> Bool) -> Parser c i * {}
-# nextWhile = \updateWith, isGood ->
-#     @Parser \s0 ->
-#         finalState = s0.src |> List.walkFromUntil s0.offset s0 \s, c ->
-#             if isGood c then
-#                 Continue {s & offset: s.offset + 1,
-#                               context: s.context |> updateWith c}
-#             else
-#                 Break s
-#         Ok {val: {}, state: finalState}
+# # one: (c, i -> c) -> Parser c i * i 
+# # one = \updateWith ->
+# #     @Parser \s ->
+# #         char <- Result.try (s.src |> List.get s.offset)
+# #         Ok {val: char, state: {s & offset: s.offset + 1,
+# #                                    context: s.context |> updateWith char} }
 
+# # oneIf: (c, i -> c), (i -> Bool) -> Parser c i * i 
+# # oneIf = \updateWith, isGood ->
+# #     @Parser \s ->
+# #         char <- Result.try (s.src |> List.get s.offset)
+# #         if isGood char then
+# #             Ok {val: char, state: {s & offset: s.offset + 1,
+# #                                        context: s.context |> updateWith char} }
+# #         else 
+# #             Err (FailAt s.context)  
+
+# Might be able to write a more efficient version than this?
+# Bad name?
+getChompedSource : Parser c i p * -> Parser c i p (List i)
+getChompedSource = \parser ->
+    parser |> mapChompedSource (\l, _ -> l)
+
+mapChompedSource : Parser c i p a, (List i, a -> b) -> Parser c i p b
+mapChompedSource = \@Parser parse, f ->
+        @Parser \s0 ->
+            {val: a, state: s1, backtrackable: b1} <- try (parse s0)
+
+            when s1.offset - s0.offset is
+                x if x >= 0 ->
+                    chomped = s0.src |> List.sublist {start: s0.offset, len: x |> Num.toNat}
+                    Ok {val: f chomped a, 
+                        state: s1, backtrackable: b1}
+
+                _ ->
+                    Err {bag: fromState s1 OutOfBounds, backtrackable: b1}
+       
+
+#future ref: 
+#nextWhile: (State i, i -> State i), (i -> Bool) -> Parser i {}
+chompWhile: (i -> Bool) -> Parser c i * {}
+chompWhile = \isGood ->
+    @Parser \s ->
+        initialPos = s.offset
+        finalPos = s.src |> List.walkFromUntil s.offset initialPos \p, c ->
+            if isGood c then
+                Continue (p + 1)
+            else
+                Break p
+
+        Ok {val: {}, state: {s & offset: finalPos}, 
+            backtrackable: if finalPos > initialPos then No else Yes}
+
+
+
+# -- LOOP ---------
+
+Step state a : [Loop state, Done a]
+
+loop : state, (state -> Parser c i p (Step state a)) -> Parser c i p a
+loop = \state, callback ->
+    @Parser \s ->
+        loopImpl Yes state callback s
+
+
+# -- BACKTRACKABLE ---------
+
+backtrackable : Parser c i p a -> Parser c i p a
+backtrackable = \@Parser parse ->
+    @Parser \s0 ->
+        when parse s0 is
+            Err err ->
+                Err {err & backtrackable: Yes}
+            Ok step ->
+                Ok {step & backtrackable: Yes}
+
+commit : a -> Parser * * * a
+commit = \a ->
+    @Parser \s ->
+        Ok {val: a, state: s, backtrackable: No}
+
+
+
+
+# -- TOKEN & SYMBOL
+
+Token i p : { tok: List i, expecting: Problem p}
+
+token : Token i p -> Parser c i p {} | i has Eq
+token = \{tok, expecting} ->
+    @Parser \s ->
+        when isSubSource tok s.offset s.src is
+            Ok newOffset ->
+                Ok {val: {}, state: {s & offset: newOffset},
+                    backtrackable: if newOffset > s.offset then No else Yes}
+            Err _ ->
+                Err {bag: Append Empty (fromState s expecting), backtrackable: Yes}
+
+symbol : Token i p -> Parser c i p {} | i has Eq
+symbol =
+  token
+
+# -- LOW LEVEL ---------
+
+isSubSource : List i, Nat, List i -> Result Nat OutOfBounds
+            | i has Eq
+isSubSource = \smallSrc, offset, bigSrc ->
+    if offset + List.len smallSrc <= List.len bigSrc then
+
+        smallSrc |> List.walkTry offset \p, c ->
+            char <- Result.try (List.get bigSrc p)
+
+            if c == char then
+                Ok (p + 1)
+            else
+                Err OutOfBounds
+                
+    else
+        Err OutOfBounds
+
+
+findSubSource : List i, Nat, List i -> Result Nat OutOfBounds
+                | i has Eq
+findSubSource = \smallSrc, offset, bigSrc -> 
+   smallLen = List.len smallSrc
+
+   if offset + smallLen <= List.len bigSrc then
+
+        finalPos = 
+            bigStr |> List.walkFromUntil offset offset \p,c ->
+                subStr = List.sublist bigStr {start: p, len: smallLen}
+
+                newPos = pos |> posUpdate c
+                if smallSrc == subStr then
+                    Break newPos
+                else 
+                    Continue newPos
+
+
+    if finalPos.offset == List.len bigStr then
+        Err (EndOfList finalPos)
+    else 
+        Ok finalPos
+
+
+var _Parser_findSubSource = F5(function(smallString, offset, row, col, bigString)
+{
+	var newOffset = bigString.indexOf(smallString, offset);
+	var target = newOffset < 0 ? bigString.length : newOffset + smallString.length;
+
+	while (offset < target)
+	{
+		var code = bigString.charCodeAt(offset++);
+		code === 0x000A /* \n */
+			? ( col=1, row++ )
+			: ( col++, (code & 0xF800) === 0xD800 && offset++ )
+	}
+
+	return __Utils_Tuple3(newOffset, row, col);
+});
 
 # ---- INTERNAL HELPER FUNCTIONS -------
 
+#Could this list be reversed? I.e. could one use append instead of prepend? That would be more performant.
+bagToList : Bag c p, List (DeadEnd c p) -> List (DeadEnd c p)
+bagToList = \bag, list ->
+    when bag is
+        Empty ->
+            list
+        
+        AddRight bag1 x ->
+            bag1 |> bagToList (list |> List.prepend x)
+        
+        Append bag1 bag2 ->
+            bag1 |> bagToList (bag2 |> bagToList list)
+
+fromState : State c *, Problem p -> Bag c p
+fromState = \s, p ->
+  AddRight Empty {offset: s.offset, problem: p, contextStack: s.context}
+
+fromInfo : Nat, Problem p, List (Located c) -> Bag c p
+fromInfo = \offset, p, cs ->
+    AddRight Empty {offset: offset, problem: p, contextStack: cs}              
+
 #Helper function for many and oneOrMore
-manyImpl : Parser c i p a, List a, State c i -> PResult c i p (List a)
+manyImpl : Parser c i p a, List a, State c i -> PStep c i p (List a)
 manyImpl = \@Parser parser, vals, s ->
     when parser s is
-        Err {backtrackable: b, parsingError: _} ->
+        Err {backtrackable: b, bag: _} ->
             Ok { val: vals, state: s, backtrackable: b }
 
         Ok { val: val, state: newState, backtrackable: _ } ->
@@ -299,3 +453,16 @@ sepBy1 = \parser, separator ->
     const (\val -> \vals -> List.prepend vals val)
     |> keep parser
     |> keep (many parserFollowedBySep)
+
+
+#Helper function for loop
+loopImpl : Backtrackable, state, (state -> Parser c i p (Step state a)), State c i -> PStep c i p a
+loopImpl = \b, state, callback, s0 ->
+    @Parser parse = callback state
+    {val: step, state: s1, backtrackable: b1} <- try (parse s0)
+    when step is
+        Loop newState ->
+            loopImpl (b |> and b1) newState callback s1
+
+        Done result ->
+            Ok {val: result, state: s1,backtrackable: (b |> and b1)}    
