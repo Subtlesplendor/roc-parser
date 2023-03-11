@@ -57,6 +57,24 @@ PResult context input problem value :
     Result (Success context input value) (Failure context problem)
 
 
+try: PResult c i p a, (Success c i a -> PResult c i p b) -> PResult c i p b
+try = \res, callback ->
+    step <- Result.try res
+    when callback step is
+        Ok {val: b, state: s2, backtrackable: b2} ->
+            Ok {val: b, state: s2, backtrackable: step.backtrackable |> and b2}
+        Err {parsingError: err2, backtrackable: b2} ->
+            Err {parsingError: err2, backtrackable: step.backtrackable |> and b2}
+
+onFail: PResult c i p a, (Failure c p -> PResult c i p a) -> PResult c i p a
+onFail = \res, callback ->
+    err <- Result.onErr res
+    when callback err is
+        Ok {val: b, state: s2, backtrackable: b2} ->
+            Ok {val: b, state: s2, backtrackable: err.backtrackable |> and b2}
+        Err {parsingError: err2, backtrackable: b2} ->
+            Err {parsingError: err2, backtrackable: err.backtrackable |> and b2}
+
 # -- OPERATING ------------
 
 # Construct a parser from a parser-function.
@@ -97,81 +115,82 @@ end =
 
 # # -- COMBINATORS ----------
 
-# map: Parser c i p a, (a -> b) -> Parser c i p b
-# map = \@Parser parse, f ->
-#     @Parser \s ->
-#         {val, state, backtrackable} <- Result.try (parse s)
-#         Ok {val: f val, state, backtrackable}        
+map: Parser c i p a, (a -> b) -> Parser c i p b
+map = \@Parser parser, f ->
+    @Parser \s0 ->
+        {val: a, backtrackable: b1, state: s1} <- try (parser s0)
+        Ok {val: f a, backtrackable: b1, state: s1}        
 
-# # map2: Parser c i p a, Parser c i p b, (a, b -> d) -> Parser c i p d
-# map2 = \@Parser first, @Parser second, f ->
-#     @Parser \s0 ->
-#         {val: val1, state: s1} <- Result.try (first s0)
-#         {val: val2, state: s2} <- Result.try (second s1)
-#         Ok {val: f val1 val2, state: s2}
+map2: Parser c i p a, Parser c i p b, (a, b -> d) -> Parser c i p d
+map2 = \@Parser first, @Parser second, f ->
+    @Parser \s0 ->
+        {val: val1, state: s1, backtrackable: b1} <- try (first s0)
+        {val: val2, state: s2, backtrackable: b2} <- try (second s1)
+        Ok {val: f val1 val2, state: s2, backtrackable: b1 |> and b2}
 
-# map3: Parser c i p a, Parser c i p b, Parser c i p d, (a, b, d -> e) -> Parser c i p e
-# map3 = \@Parser first, @Parser second, @Parser third, f ->
-#     @Parser \s0 ->
-#         {val: val1, state: s1} <- Result.try (first s0)
-#         {val: val2, state: s2} <- Result.try (second s1)
-#         {val: val3, state: s3} <- Result.try (third s2)
-#         Ok {val: f val1 val2 val3, state: s3}
-
-
-# keep: Parser c i p (a -> b), Parser c i p a -> Parser c i p b        
-# keep = \parserFunc, parserArg ->
-#      map2 parserFunc parserArg (\f, x -> f x)
-
-# skip: Parser c i p keep, Parser c i p ignore -> Parser c i p keep
-# skip = \parserKeep, parserSkip ->
-#     map2 parserKeep parserSkip (\k, _ -> k)
-
-# andThen: Parser c i p a, (a -> Parser c i p b) -> Parser c i p b
-# andThen = \@Parser firstParser, parserBuilder ->
-#     @Parser \s0 ->
-#         {val: a, state: s1} <- Result.try (firstParser s0)
-#         @Parser nextParser = parserBuilder a
-#         nextParser s1
+map3: Parser c i p a, Parser c i p b, Parser c i p d, (a, b, d -> e) -> Parser c i p e
+map3 = \@Parser first, @Parser second, @Parser third, f ->
+    @Parser \s0 ->
+        {val: val1, state: s1, backtrackable: b1} <- try (first s0)
+        {val: val2, state: s2, backtrackable: b2} <- try (second s1)
+        {val: val3, state: s3, backtrackable: b3} <- try (third s2)
+        Ok {val: f val1 val2 val3, state: s3, backtrackable: b1 |> and b2 |> and b3}
 
 
+keep: Parser c i p (a -> b), Parser c i p a -> Parser c i p b        
+keep = \parserFunc, parserArg ->
+     map2 parserFunc parserArg (\f, x -> f x)
 
-# alt : Parser c i p v, Parser c i p v -> Parser c i p v
-# alt = \@Parser first, @Parser second ->
-#     @Parser \state ->
-#         _ <- Result.onErr (first state)
-#         _ <- Result.onErr (second state)
-#         Err (FailAt state.context)
+skip: Parser c i p keep, Parser c i p ignore -> Parser c i p keep
+skip = \parserKeep, parserSkip ->
+    map2 parserKeep parserSkip (\k, _ -> k)
 
-# oneOf : List (Parser c i p v) -> Parser c i p v
-# oneOf = \parsers ->
-#     List.walkBackwards parsers fail (\laterParser, earlierParser -> alt earlierParser laterParser)
+andThen: Parser c i p a, (a -> Parser c i p b) -> Parser c i p b
+andThen = \@Parser firstParser, parserBuilder ->
+    @Parser \s0 ->
+        {val: a, state: s1, backtrackable: b1} <- try (firstParser s0)
+        @Parser nextParser = parserBuilder a
+        step2 <- try (nextParser s1)
+        Ok {step2 & backtrackable: b1 |> and step2.backtrackable}
+
+
+
+alt : Parser c i p v, Parser c i p v -> Parser c i p v
+alt = \@Parser first, @Parser second ->
+    @Parser \state ->
+        {parsingError: _, backtrackable: b1} <- onFail (first state)
+        {parsingError: _, backtrackable: b2} <- onFail (second state)
+        Err {parsingError: FailAt state.context, backtrackable: b1 |> and b2}
+
+oneOf : List (Parser c i p v) -> Parser c i p v
+oneOf = \parsers ->
+    List.walkBackwards parsers fail (\laterParser, earlierParser -> alt earlierParser laterParser)
       
 
-# lazy : ({} -> Parser c i p v) -> Parser c i p v
-# lazy = \thunk ->
-#     const {}
-#     |> andThen thunk        
+lazy : ({} -> Parser c i p v) -> Parser c i p v
+lazy = \thunk ->
+    const {}
+    |> andThen thunk        
 
 
-# ## A parser which runs the element parser *zero* or more times on the input,
-# ## returning a list containing all the parsed elements.
-# ##
-# ## Also see `oneOrMore`.
-# many : Parser c i p v -> Parser c i p (List v)
-# many = \parser ->
-#     @Parser \state ->
-#         manyImpl parser [] state
+## A parser which runs the element parser *zero* or more times on the input,
+## returning a list containing all the parsed elements.
+##
+## Also see `oneOrMore`.
+many : Parser c i p v -> Parser c i p (List v)
+many = \parser ->
+    @Parser \state ->
+        manyImpl parser [] state
 
-# ## A parser which runs the element parser *one* or more times on the input,
-# ## returning a list containing all the parsed elements.
-# ##
-# ## Also see `many`.
-# oneOrMore : Parser c i p v -> Parser c i p (List v)
-# oneOrMore = \@Parser parser ->
-#     @Parser \s ->
-#         {val, state} <- Result.try (parser s) 
-#         manyImpl (@Parser parser) [val] state       
+## A parser which runs the element parser *one* or more times on the input,
+## returning a list containing all the parsed elements.
+##
+## Also see `many`.
+oneOrMore : Parser c i p v -> Parser c i p (List v)
+oneOrMore = \@Parser parser ->
+    @Parser \s ->
+        {val, state, backtrackable: _} <- try (parser s) 
+        manyImpl (@Parser parser) [val] state       
 
 # ## Runs a parser for an 'opening' delimiter, then your main parser, then the 'closing' delimiter,
 # ## and only returns the result of your main parser.
@@ -257,26 +276,26 @@ end =
 #         Ok {val: {}, state: finalState}
 
 
-# # ---- INTERNAL HELPER FUNCTIONS -------
+# ---- INTERNAL HELPER FUNCTIONS -------
 
-# #Helper function for many and oneOrMore
-# manyImpl : Parser c i p a, List a, State c i -> PResult c i p (List a)
-# manyImpl = \@Parser parser, vals, s ->
-#     when parser s is
-#         Err _ ->
-#             Ok { val: vals, state: s }
+#Helper function for many and oneOrMore
+manyImpl : Parser c i p a, List a, State c i -> PResult c i p (List a)
+manyImpl = \@Parser parser, vals, s ->
+    when parser s is
+        Err {backtrackable: b, parsingError: _} ->
+            Ok { val: vals, state: s, backtrackable: b }
 
-#         Ok { val: val, state: newState } ->
-#             manyImpl (@Parser parser) (List.append vals val) newState  
+        Ok { val: val, state: newState, backtrackable: _ } ->
+            manyImpl (@Parser parser) (List.append vals val) newState  
 
-# # Helper function for sepBy
-# sepBy1 : Parser c i p v, Parser c i p * -> Parser c i p (List v)
-# sepBy1 = \parser, separator ->
-#     parserFollowedBySep =
-#         const (\_ -> \val -> val)
-#         |> keep separator
-#         |> keep parser
+# Helper function for sepBy
+sepBy1 : Parser c i p v, Parser c i p * -> Parser c i p (List v)
+sepBy1 = \parser, separator ->
+    parserFollowedBySep =
+        const (\val -> val)
+        |> skip separator
+        |> keep parser
 
-#     const (\val -> \vals -> List.prepend vals val)
-#     |> keep parser
-#     |> keep (many parserFollowedBySep)
+    const (\val -> \vals -> List.prepend vals val)
+    |> keep parser
+    |> keep (many parserFollowedBySep)

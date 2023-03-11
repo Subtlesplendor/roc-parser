@@ -234,8 +234,8 @@ manyImpl = \@Parser parser, vals, s ->
 sepBy1 : Parser i v, Parser i sep -> Parser i (List v)
 sepBy1 = \parser, separator ->
     parserFollowedBySep =
-        succeed (\_ -> \val -> val)
-        |> keep separator
+        succeed (\val -> val)
+        |> skip separator
         |> keep parser
 
     succeed (\val -> \vals -> List.prepend vals val)
