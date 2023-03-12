@@ -328,6 +328,22 @@ chompUntilEndOr = \lst ->
                 Ok {val: {}, state: {s & offset: adjustedOffset},
                     backtrackable: if adjustedOffset == initialOffset then Yes else No}
 
+# -- CONTEXT ---------
+
+inContext : Parser context i p v, context -> Parser context i p v
+inContext = \@Parser parse, context ->
+    @Parser \s0 ->
+        contextStack = s0.context |> List.prepend {offset: s0.offset, context: context}
+        step <- try (parse (s0 |> changeContext contextStack))
+        
+        Ok { step & state: step.state |> changeContext s0.context}
+
+
+changeContext : State c i, List (Located c) -> State c i
+changeContext = \s, newContext ->
+    {s & context: newContext}
+
+
 # -- LOOP ---------
 
 Step state a : [Loop state, Done a]
