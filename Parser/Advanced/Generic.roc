@@ -1,5 +1,5 @@
-interface Parser.FullStack 
-    exposes [Parser, #Types
+interface Parser.Advanced.Generic 
+    exposes [Parser, DeadEnd, #Types
              buildPrimitiveParser,
              run, #Operating
              const, fail, problem, end, symbol, #Primitives
@@ -13,7 +13,7 @@ interface Parser.FullStack
              ]
     imports [Stack.{Stack}]
 
-## A medium parser library. 
+## A full parser library. 
 
 ## The parser parses lists of `input` and returns a `value`.
 
@@ -53,48 +53,6 @@ and = \b1, b2 ->
         (No, _) -> No
         (_, No) -> No
         _ -> Yes
-
-# or: Backtrackable, Backtrackable -> Backtrackable
-# or = \b1, b2 -> 
-#     when (b1, b2) is
-#         (Yes, _) -> Yes
-#         (_, Yes) -> Yes
-#         _ -> No        
-            
-
-
-# try: PStep c i p a, (Good c i a -> PStep c i p b) -> PStep c i p b
-# try = \res, callback ->
-#     step <- Result.try res
-#     when callback step is
-#         Ok {val: b, state: s2, backtrackable: b2} ->
-#             Ok {val: b, state: s2, backtrackable: step.backtrackable |> and b2}
-#         Err {stack: stack2, backtrackable: b2} ->
-#             Err {stack: stack2, backtrackable: step.backtrackable |> and b2}
-
-
-
-
-# ------------------      
-
-# onFail: PStep c i p a, (Bad c p -> PStep c i p a) -> PStep c i p a
-# onFail = \res, callback ->
-#     err <- Result.onErr res
-#     when callback err is
-#         Ok {val: b, state: s2, backtrackable: b2} ->
-#             Ok {val: b, state: s2, backtrackable: err.backtrackable |> and b2}
-#         Err {stack: stack2, backtrackable: b2} ->
-#             Err {stack: err.stack |> Stack.onTopOf stack2, backtrackable: err.backtrackable |> and b2}
-                                 
-
-# onFail2: PStep c i p a, (Bad c p -> PStep c i p a) -> PStep c i p a
-# onFail2 = \res, callback ->
-#     err <- Result.onErr res
-#     when callback err is
-#         Ok {val: b, state: s2, backtrackable: b2} ->
-#             Ok {val: b, state: s2, backtrackable: err.backtrackable |> and b2}
-#         Err {stack: stack2, backtrackable: b2} ->
-#             Err {stack: err.stack |> Stack.onTopOf stack2, backtrackable: err.backtrackable |> and b2}
 
 # -- OPERATING ------------
 
@@ -436,11 +394,7 @@ findSubSource = \smallSrc, offset, bigSrc ->
 
 fromState : State c *, Problem p -> Stack (DeadEnd c p)
 fromState = \s, p ->
-    Stack.new |> Stack.push {offset: s.offset, problem: p, contextStack: s.context}
-
-# fromInfo : Nat, Problem p, Stack (Located c) -> Stack (DeadEnd c p)
-# fromInfo = \offset, p, cs ->
-#     Stack.new |> Stack.push {offset: offset, problem: p, contextStack: cs}        
+    Stack.new |> Stack.push {offset: s.offset, problem: p, contextStack: s.context}       
 
 #Helper function for many and oneOrMore
 manyImpl : Parser c i p a, List a, State c i, Backtrackable -> PStep c i p (List a)
