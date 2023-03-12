@@ -72,8 +72,23 @@ try = \res, callback ->
         Err {stack: stack2, backtrackable: b2} ->
             Err {stack: stack2, backtrackable: step.backtrackable |> and b2}
 
+
+
+
+# ------------------      
+
 onFail: PStep c i p a, (Bad c p -> PStep c i p a) -> PStep c i p a
 onFail = \res, callback ->
+    err <- Result.onErr res
+    when callback err is
+        Ok {val: b, state: s2, backtrackable: b2} ->
+            Ok {val: b, state: s2, backtrackable: err.backtrackable |> and b2}
+        Err {stack: stack2, backtrackable: b2} ->
+            Err {stack: err.stack |> Stack.onTopOf stack2, backtrackable: err.backtrackable |> and b2}
+                                 
+
+onFail2: PStep c i p a, (Bad c p -> PStep c i p a) -> PStep c i p a
+onFail2 = \res, callback ->
     err <- Result.onErr res
     when callback err is
         Ok {val: b, state: s2, backtrackable: b2} ->
@@ -155,14 +170,12 @@ skip = \parserKeep, parserSkip ->
 andThen: Parser c i p a, (a -> Parser c i p b) -> Parser c i p b
 andThen = \@Parser firstParser, parserBuilder ->
     @Parser \s0 ->
-        {val: a, state: s1, backtrackable: b1} <- try (firstParser s0)
+        {val: a, state: s1, backtrackable: _} <- try (firstParser s0)
         @Parser nextParser = parserBuilder a
-        step2 <- try (nextParser s1)
-        Ok {step2 & backtrackable: b1 |> and step2.backtrackable}
+        nextParser s1
 
 
-# Does this work the way I think it does?
-alt : Parser c i p v, Parser c i p v -> Parser c i p v
+alt: Parser c i p v, Parser c i p v -> Parser c i p v
 alt = \@Parser first, @Parser second ->
     @Parser \state ->
         firstErr <- onFail (first state)
@@ -224,15 +237,6 @@ ignore = \parser ->
 
 # ---- LOW LEVEL FUNCTIONS -------
 
-# next: Parser c i * {}
-# next =
-#     @Parser \s ->
-#         char <- Result.try (s.src |> List.get s.offset)
-#         Ok {val: {}, state: {s & offset: s.offset + 1} }
-
-
-
-
 chompIf: (i -> Bool), Problem p -> Parser * i p {}
 chompIf = \isGood, expecting ->
     @Parser \s ->
@@ -246,22 +250,6 @@ chompIf = \isGood, expecting ->
             Err OutOfBounds ->
                 Err {stack: fromState s OutOfBounds, backtrackable: Yes}        
 
-# # one: (c, i -> c) -> Parser c i * i 
-# # one = \updateWith ->
-# #     @Parser \s ->
-# #         char <- Result.try (s.src |> List.get s.offset)
-# #         Ok {val: char, state: {s & offset: s.offset + 1,
-# #                                    context: s.context |> updateWith char} }
-
-# # oneIf: (c, i -> c), (i -> Bool) -> Parser c i * i 
-# # oneIf = \updateWith, isGood ->
-# #     @Parser \s ->
-# #         char <- Result.try (s.src |> List.get s.offset)
-# #         if isGood char then
-# #             Ok {val: char, state: {s & offset: s.offset + 1,
-# #                                        context: s.context |> updateWith char} }
-# #         else 
-# #             Err (FailAt s.context)  
 
 # Might be able to write a more efficient version than this?
 # Bad name?
