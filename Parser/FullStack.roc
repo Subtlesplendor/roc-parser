@@ -3,7 +3,7 @@ interface Parser.FullStack
              buildPrimitiveParser,
              run, #Operating
              const, fail, problem, end, symbol, #Primitives
-             map, map2, map3, keep, skip, andThen, #Combinators
+             map, map2, keep, skip, andThen, #Combinators
              lazy, many, oneOrMore, alt, oneOf, between, sepBy, ignore, #Combinators
              chompIf, chompWhile, chompUntil, chompUntilEndOr, getChompedSource, #Chompers
              getOffset, getSource, # Info
@@ -63,38 +63,38 @@ and = \b1, b2 ->
             
 
 
-try: PStep c i p a, (Good c i a -> PStep c i p b) -> PStep c i p b
-try = \res, callback ->
-    step <- Result.try res
-    when callback step is
-        Ok {val: b, state: s2, backtrackable: b2} ->
-            Ok {val: b, state: s2, backtrackable: step.backtrackable |> and b2}
-        Err {stack: stack2, backtrackable: b2} ->
-            Err {stack: stack2, backtrackable: step.backtrackable |> and b2}
+# try: PStep c i p a, (Good c i a -> PStep c i p b) -> PStep c i p b
+# try = \res, callback ->
+#     step <- Result.try res
+#     when callback step is
+#         Ok {val: b, state: s2, backtrackable: b2} ->
+#             Ok {val: b, state: s2, backtrackable: step.backtrackable |> and b2}
+#         Err {stack: stack2, backtrackable: b2} ->
+#             Err {stack: stack2, backtrackable: step.backtrackable |> and b2}
 
 
 
 
 # ------------------      
 
-onFail: PStep c i p a, (Bad c p -> PStep c i p a) -> PStep c i p a
-onFail = \res, callback ->
-    err <- Result.onErr res
-    when callback err is
-        Ok {val: b, state: s2, backtrackable: b2} ->
-            Ok {val: b, state: s2, backtrackable: err.backtrackable |> and b2}
-        Err {stack: stack2, backtrackable: b2} ->
-            Err {stack: err.stack |> Stack.onTopOf stack2, backtrackable: err.backtrackable |> and b2}
+# onFail: PStep c i p a, (Bad c p -> PStep c i p a) -> PStep c i p a
+# onFail = \res, callback ->
+#     err <- Result.onErr res
+#     when callback err is
+#         Ok {val: b, state: s2, backtrackable: b2} ->
+#             Ok {val: b, state: s2, backtrackable: err.backtrackable |> and b2}
+#         Err {stack: stack2, backtrackable: b2} ->
+#             Err {stack: err.stack |> Stack.onTopOf stack2, backtrackable: err.backtrackable |> and b2}
                                  
 
-onFail2: PStep c i p a, (Bad c p -> PStep c i p a) -> PStep c i p a
-onFail2 = \res, callback ->
-    err <- Result.onErr res
-    when callback err is
-        Ok {val: b, state: s2, backtrackable: b2} ->
-            Ok {val: b, state: s2, backtrackable: err.backtrackable |> and b2}
-        Err {stack: stack2, backtrackable: b2} ->
-            Err {stack: err.stack |> Stack.onTopOf stack2, backtrackable: err.backtrackable |> and b2}
+# onFail2: PStep c i p a, (Bad c p -> PStep c i p a) -> PStep c i p a
+# onFail2 = \res, callback ->
+#     err <- Result.onErr res
+#     when callback err is
+#         Ok {val: b, state: s2, backtrackable: b2} ->
+#             Ok {val: b, state: s2, backtrackable: err.backtrackable |> and b2}
+#         Err {stack: stack2, backtrackable: b2} ->
+#             Err {stack: err.stack |> Stack.onTopOf stack2, backtrackable: err.backtrackable |> and b2}
 
 # -- OPERATING ------------
 
@@ -140,24 +140,18 @@ end =
 map: Parser c i p a, (a -> b) -> Parser c i p b
 map = \@Parser parser, f ->
     @Parser \s0 ->
-        {val: a, backtrackable: b1, state: s1} <- try (parser s0)
-        Ok {val: f a, backtrackable: b1, state: s1}        
+        {val: a, backtrackable: b1, state: s1} <- Result.try (parser s0)
+        Ok {val: f a, backtrackable: b1, state: s1}    
 
 map2: Parser c i p a, Parser c i p b, (a, b -> d) -> Parser c i p d
 map2 = \@Parser first, @Parser second, f ->
     @Parser \s0 ->
-        {val: val1, state: s1, backtrackable: b1} <- try (first s0)
-        {val: val2, state: s2, backtrackable: b2} <- try (second s1)
-        Ok {val: f val1 val2, state: s2, backtrackable: b1 |> and b2}
-
-map3: Parser c i p a, Parser c i p b, Parser c i p d, (a, b, d -> e) -> Parser c i p e
-map3 = \@Parser first, @Parser second, @Parser third, f ->
-    @Parser \s0 ->
-        {val: val1, state: s1, backtrackable: b1} <- try (first s0)
-        {val: val2, state: s2, backtrackable: b2} <- try (second s1)
-        {val: val3, state: s3, backtrackable: b3} <- try (third s2)
-        Ok {val: f val1 val2 val3, state: s3, backtrackable: b1 |> and b2 |> and b3}
-
+        {val: a, backtrackable: b1, state: s1} <- Result.try (first s0)
+        when (second s1) is
+            Err {stack, backtrackable: b2} ->
+                Err {stack, backtrackable: b1 |> and b2}
+            Ok {val: b, backtrackable: b2, state: s2} ->
+                Ok {val: f a b, backtrackable: b1 |> and b2, state: s2}
 
 keep: Parser c i p (a -> b), Parser c i p a -> Parser c i p b        
 keep = \parserFunc, parserArg ->
@@ -170,19 +164,27 @@ skip = \parserKeep, parserSkip ->
 andThen: Parser c i p a, (a -> Parser c i p b) -> Parser c i p b
 andThen = \@Parser firstParser, parserBuilder ->
     @Parser \s0 ->
-        {val: a, state: s1, backtrackable: _} <- try (firstParser s0)
+        {val: a, state: s1, backtrackable: b1} <- Result.try (firstParser s0)
         @Parser nextParser = parserBuilder a
-        nextParser s1
+        when nextParser s1 is
+            Err {stack, backtrackable: b2}  ->
+                Err {stack, backtrackable: b1 |> and b2}
+            Ok res ->
+                Ok {res & backtrackable: b1 |> and res.backtrackable}
 
 
 alt: Parser c i p v, Parser c i p v -> Parser c i p v
 alt = \@Parser first, @Parser second ->
     @Parser \state ->
-        firstErr <- onFail (first state)
-        if firstErr.backtrackable == No then 
-            Err firstErr
+        {stack: stack1, backtrackable: b1} <- Result.onErr (first state)
+        if b1 == No then 
+            Err {stack: stack1, backtrackable: b1}
         else
-            second state
+            when second state is
+                Err {stack: stack2, backtrackable: b2} ->
+                    Err {stack: stack1 |> Stack.onTopOf stack2, backtrackable: b1 |> and b2}
+                Ok res ->
+                    Ok {res & backtrackable: b1 |> and res.backtrackable}          
 
 oneOf : List (Parser c i p v) -> Parser c i p v
 oneOf = \parsers ->
@@ -203,7 +205,7 @@ lazy = \thunk ->
 many : Parser c i p v -> Parser c i p (List v)
 many = \parser ->
     @Parser \state ->
-        manyImpl parser [] state
+        manyImpl parser [] state Yes
 
 ## A parser which runs the element parser *one* or more times on the input,
 ## returning a list containing all the parsed elements.
@@ -212,8 +214,8 @@ many = \parser ->
 oneOrMore : Parser c i p v -> Parser c i p (List v)
 oneOrMore = \@Parser parser ->
     @Parser \s ->
-        {val, state, backtrackable: _} <- try (parser s)
-        manyImpl (@Parser parser) [val] state       
+        {val, state, backtrackable: b} <- Result.try (parser s)
+        manyImpl (@Parser parser) [val] state b      
 
 ## Runs a parser for an 'opening' delimiter, then your main parser, then the 'closing' delimiter,
 ## and only returns the result of your main parser.
@@ -223,7 +225,10 @@ oneOrMore = \@Parser parser ->
 ## >>> betweenBraces  = \parser -> parser |> between (scalar '[') (scalar ']')
 between : Parser c i p v, Parser c i p *, Parser c i p * -> Parser c i p v
 between = \parser, open, close ->
-    map3 open parser close (\_, val, _ -> val)            
+    const (\x -> x)
+    |> skip open
+    |> keep parser
+    |> skip close            
 
 sepBy : Parser c i p v, Parser c i p * -> Parser c i p (List v)
 sepBy = \parser, separator ->
@@ -260,7 +265,7 @@ getChompedSource = \parser ->
 mapChompedSource : Parser c i p a, (List i, a -> b) -> Parser c i p b
 mapChompedSource = \@Parser parse, f ->
         @Parser \s0 ->
-            {val: a, state: s1, backtrackable: b1} <- try (parse s0)
+            {val: a, state: s1, backtrackable: b1} <- Result.try(parse s0)
 
             when s1.offset - s0.offset is
                 x if x >= 0 ->
@@ -320,8 +325,7 @@ inContext : Parser context i p v, context -> Parser context i p v
 inContext = \@Parser parse, context ->
     @Parser \s0 ->
         contextStack = s0.context |> Stack.push {offset: s0.offset, context: context}
-        step <- try (parse (s0 |> changeContext contextStack))
-        
+        step <- Result.try (parse (s0 |> changeContext contextStack))
         Ok { step & state: step.state |> changeContext s0.context}
 
 
@@ -337,7 +341,7 @@ Step state a : [Loop state, Done a]
 loop : state, (state -> Parser c i p (Step state a)) -> Parser c i p a
 loop = \state, callback ->
     @Parser \s ->
-        loopImpl Yes state callback s
+        loopHelp Yes state callback s
 
 
 # -- BACKTRACKABLE ---------
@@ -439,14 +443,15 @@ fromState = \s, p ->
 #     Stack.new |> Stack.push {offset: offset, problem: p, contextStack: cs}        
 
 #Helper function for many and oneOrMore
-manyImpl : Parser c i p a, List a, State c i -> PStep c i p (List a)
-manyImpl = \@Parser parser, vals, s ->
+manyImpl : Parser c i p a, List a, State c i, Backtrackable -> PStep c i p (List a)
+manyImpl = \@Parser parser, vals, s, b ->
     when parser s is
-        Err {backtrackable: b, stack: _} ->
-            Ok { val: vals, state: s, backtrackable: b }
+        Err {backtrackable: b1, stack: _} ->
+            Ok { val: vals, state: s, backtrackable: b 
+            |> and b1 }
 
-        Ok { val: val, state: newState, backtrackable: _ } ->
-            manyImpl (@Parser parser) (List.append vals val) newState  
+        Ok { val: val, state: newState, backtrackable: b1 } ->
+            manyImpl (@Parser parser) (List.append vals val) newState b1  
 
 # Helper function for sepBy
 sepBy1 : Parser c i p v, Parser c i p * -> Parser c i p (List v)
@@ -462,13 +467,17 @@ sepBy1 = \parser, separator ->
 
 
 #Helper function for loop
-loopImpl : Backtrackable, state, (state -> Parser c i p (Step state a)), State c i -> PStep c i p a
-loopImpl = \b, state, callback, s0 ->
+loopHelp : Backtrackable, state, (state -> Parser c i p (Step state a)), State c i -> PStep c i p a
+loopHelp = \b, state, callback, s0 ->
     @Parser parse = callback state
-    {val: step, state: s1, backtrackable: b1} <- try (parse s0)
-    when step is
-        Loop newState ->
-            loopImpl (b |> and b1) newState callback s1
+    when parse s0 is
+        Err {stack, backtrackable: b1} ->
+            Err {stack, backtrackable: b |> and b1}
+        
+        Ok {val: step, state: s1, backtrackable: b1} ->
+            when step is
+                Loop newState ->
+                    loopHelp (b |> and b1) newState callback s1
 
-        Done result ->
-            Ok {val: result, state: s1,backtrackable: (b |> and b1)}    
+                Done result ->
+                    Ok {val: result, state: s1,backtrackable: b |> and b1}    
