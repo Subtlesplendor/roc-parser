@@ -288,7 +288,7 @@ mapChompedSource = \@Parser parse, f ->
 
 #future ref: 
 #nextWhile: (State i, i -> State i), (i -> Bool) -> Parser i {}
-chompWhile: (i -> Bool) -> Parser c i * {}
+chompWhile: (i -> Bool) -> Parser * i * {}
 chompWhile = \isGood ->
     @Parser \s ->
         initialPos = s.offset
@@ -302,6 +302,31 @@ chompWhile = \isGood ->
             backtrackable: if finalPos > initialPos then No else Yes}
 
 
+chompUntil : Token i p -> Parser * i p {}
+            | i has Eq
+chompUntil = \{tok, expecting} ->
+    @Parser \s ->
+        when findSubSource tok s.offset s.src is
+            Ok newOffset ->
+                Ok {val: {}, state: {s & offset: newOffset},
+                    backtrackable: if List.isEmpty tok then Yes else No}
+            Err _ ->
+                Err {bag: Append Empty (fromState s expecting), backtrackable: Yes}
+
+
+chompUntilEndOr : List i -> Parser * i * {}
+                    | i has Eq 
+chompUntilEndOr = \lst ->
+    @Parser \s ->
+        initialOffset = s.offset
+        when findSubSource lst initialOffset s.src is
+            Ok newOffset ->
+                Ok {val: {}, state: {s & offset: newOffset},
+                    backtrackable: if newOffset == initialOffset then Yes else No}
+            Err _ ->
+                adjustedOffset = List.len s.src
+                Ok {val: {}, state: {s & offset: adjustedOffset},
+                    backtrackable: if adjustedOffset == initialOffset then Yes else No}
 
 # -- LOOP ---------
 
@@ -342,7 +367,7 @@ token = \{tok, expecting} ->
         when isSubSource tok s.offset s.src is
             Ok newOffset ->
                 Ok {val: {}, state: {s & offset: newOffset},
-                    backtrackable: if newOffset > s.offset then No else Yes}
+                    backtrackable: if List.isEmpty tok then Yes else No}
             Err _ ->
                 Err {bag: Append Empty (fromState s expecting), backtrackable: Yes}
 
@@ -352,7 +377,7 @@ symbol =
 
 # -- LOW LEVEL ---------
 
-isSubSource : List i, Nat, List i -> Result Nat OutOfBounds
+isSubSource : List i, Nat, List i -> Result Nat [OutOfBounds]
             | i has Eq
 isSubSource = \smallSrc, offset, bigSrc ->
     if offset + List.len smallSrc <= List.len bigSrc then
@@ -369,7 +394,7 @@ isSubSource = \smallSrc, offset, bigSrc ->
         Err OutOfBounds
 
 
-findSubSource : List i, Nat, List i -> Result Nat OutOfBounds
+findSubSource : List i, Nat, List i -> Result Nat [OutOfBounds]
                 | i has Eq
 findSubSource = \smallSrc, offset, bigSrc -> 
    smallLen = List.len smallSrc
@@ -377,37 +402,21 @@ findSubSource = \smallSrc, offset, bigSrc ->
    if offset + smallLen <= List.len bigSrc then
 
         finalPos = 
-            bigStr |> List.walkFromUntil offset offset \p,c ->
-                subStr = List.sublist bigStr {start: p, len: smallLen}
+            bigSrc |> List.walkFromUntil offset offset \p,c ->
+                subSrc = List.sublist bigSrc {start: p, len: smallLen}
 
-                newPos = pos |> posUpdate c
-                if smallSrc == subStr then
-                    Break newPos
+                if smallSrc == subSrc then
+                    Break (p + 1)
                 else 
-                    Continue newPos
+                    Continue (p + 1)
 
 
-    if finalPos.offset == List.len bigStr then
-        Err (EndOfList finalPos)
-    else 
-        Ok finalPos
-
-
-var _Parser_findSubSource = F5(function(smallString, offset, row, col, bigString)
-{
-	var newOffset = bigString.indexOf(smallString, offset);
-	var target = newOffset < 0 ? bigString.length : newOffset + smallString.length;
-
-	while (offset < target)
-	{
-		var code = bigString.charCodeAt(offset++);
-		code === 0x000A /* \n */
-			? ( col=1, row++ )
-			: ( col++, (code & 0xF800) === 0xD800 && offset++ )
-	}
-
-	return __Utils_Tuple3(newOffset, row, col);
-});
+        if finalPos == List.len bigSrc then
+            Err OutOfBounds
+        else 
+            Ok finalPos
+    
+    else Err OutOfBounds
 
 # ---- INTERNAL HELPER FUNCTIONS -------
 
