@@ -27,12 +27,13 @@ DeadEnd: Parser.Advanced.DeadEnd {} Problem
 Problem : [
     UnexpectedChar, 
     Expecting RawStr,
+    ExpectingKeyWord RawStr,
     ParsingFailure Str,
 ]
 
-buildPrimitiveParser = Parser.Advanced.buildPrimitiveParser
-
 # -- RUN ------------------
+
+buildPrimitiveParser = Parser.Advanced.buildPrimitiveParser
 
 run : Parser a, RawStr -> Result a (List DeadEnd)
 run = \parser, input ->
@@ -231,3 +232,17 @@ toToken = \tok ->
 symbol :  RawStr -> Parser {}
 symbol =
   token
+
+
+# -- UTF8 specific
+
+separators: List RawChar
+separators = [' ', '\n']
+
+spaces: Parser {}
+spaces =
+    chompWhile (\c -> c == ' ' || c == '\n' || c == '\r')
+
+keyword: RawStr -> Parser {}
+keyword = \kwd ->
+    Parser.Advanced.key separators {tok: kwd, expecting: ExpectingKeyWord kwd}

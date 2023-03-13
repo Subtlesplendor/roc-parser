@@ -2,11 +2,11 @@ interface Parser.Advanced
     exposes [Parser, DeadEnd, Token, Step, #Types
              buildPrimitiveParser,
              run, #Operating
-             const, fail, problem, end, symbol, token, #Primitives
+             const, fail, problem, end, symbol, token, key, #Primitives
              map, map2, keep, skip, andThen, #Combinators
              lazy, many, oneOrMore, alt, oneOf, between, sepBy, ignore, #Combinators
              chompIf, chompWhile, chompUntil, chompUntilEndOr, getChompedSource, mapChompedSource, #Chompers
-             getOffset, getSource, # Info
+             getOffset, getSource,
              inContext, # Context
              backtrackable, commit, # Backtracking
              loop, # Looping
@@ -346,6 +346,38 @@ token = \{tok, expecting} ->
 symbol : Token i p -> Parser * i p {} | i has Eq
 symbol =
   token
+
+
+key: List i, Token i p -> Parser * i p {} | i has Eq
+key = \separators, {tok, expecting} ->
+    @Parser \s ->
+        when isSubSource tok s.offset s.src is
+            Ok newOffset ->
+                if newOffset == (s.src |> List.len) then
+                    Ok 
+                    {
+                        val: {}, 
+                        state: {s & offset: newOffset}, 
+                        backtrackable: if List.isEmpty tok then Yes else No
+                    }
+                else when s.src |> List.get newOffset is
+                    Err OutOfBounds ->
+                        Err {stack: fromState s OutOfBounds, backtrackable: Yes}
+                    
+                    Ok char ->
+                        if separators |> List.contains char then
+                            Ok 
+                            {
+                                val: {}, 
+                                state: {s & offset: newOffset},
+                                backtrackable: if List.isEmpty tok then Yes else No
+                            }
+                        else
+                            Err {stack: fromState s expecting, backtrackable: Yes}
+                   
+
+            Err _ ->
+                Err {stack: fromState s expecting, backtrackable: Yes}
 
 # -- LOW LEVEL ---------
 
