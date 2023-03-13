@@ -1,6 +1,6 @@
 interface Stack 
     exposes [Stack, new, size, peek, push, pop, #Principals
-             fromList, toList, isEmpty, onTopOf, descend, ascend #Ergonomics
+             fromList, toList, isEmpty, onTopOf, descend #Ergonomics
              ]
     imports []
 
@@ -56,7 +56,4 @@ toList = \@Stack lst ->
 descend: Stack a, state, (state, a -> state) -> state
 descend = \@Stack lst, s, f ->
     lst |> List.walkBackwards s f 
-
-ascend: Stack a, state, (state, a -> state) -> state
-ascend = \@Stack lst, s, f ->
-    lst |> List.walk s f     
+  
