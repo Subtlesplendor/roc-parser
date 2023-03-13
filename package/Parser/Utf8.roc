@@ -48,7 +48,24 @@ problemToDeadEnd = \d ->
     { offset: d.offset, problem: d.problem, contextStack: [] }
 
 
+Position: {row: Nat, col: Nat}
 
+newLine: RawChar
+newLine = '\n'
+
+isNewLine: RawChar -> Bool
+isNewLine = \c ->
+    c == newLine
+
+errorPosition: Nat, RawStr -> Position
+errorPosition = \offset, src ->
+    chomped = src |> List.takeFirst (offset + 1)
+    when chomped |> List.splitLast newLine is
+        Err _ ->
+            {row: 1, col: 1 + offset }
+        Ok {before, after} ->
+            {row: 2 + (before |> List.countIf isNewLine), 
+            col: 1 + (after |> List.len)}
 
 # -- PRIMITIVES -----------
 
