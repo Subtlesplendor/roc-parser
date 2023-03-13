@@ -11,7 +11,7 @@ interface Parser.Advanced
              backtrackable, commit, # Backtracking
              loop, # Looping
              ]
-    imports [Stack.{Stack}]
+    imports []
 
 ## A full parser library. 
 
@@ -25,13 +25,13 @@ interface Parser.Advanced
 Parser context input problem value := 
     State context input -> PStep context input problem value
 
-State context input : { src: List input, offset: Nat, context: Stack (Located context) }
+State context input : { src: List input, offset: Nat, contextStack: List (Located context) }
 
 Located context: {offset: Nat, context: context}
 
 
 Good context input value : {val: value, state: State context input, backtrackable: Backtrackable}
-Bad context problem : {stack: Stack (DeadEnd context problem), backtrackable: Backtrackable}
+Bad context problem : {stack: List (DeadEnd context problem), backtrackable: Backtrackable}
   
 
 Problem p : [OutOfBounds,
@@ -39,7 +39,7 @@ Problem p : [OutOfBounds,
              FailAt Nat]p
              
 
-DeadEnd c p : {offset: Nat, problem: Problem p, contextStack: Stack (Located c)}
+DeadEnd c p : {offset: Nat, problem: Problem p, contextStack: List (Located c)}
 
 PStep context input problem value : 
     Result (Good context input value) (Bad context problem)
@@ -64,11 +64,11 @@ buildPrimitiveParser = \f ->
 # Run a parser and get a Result.
 run: Parser c i p v, List i-> Result v (List (DeadEnd c p))
 run = \@Parser parse, src ->
-    when parse {src, offset: 0, context: Stack.new} is
+    when parse {src, offset: 0, contextStack: []} is
         Ok good ->
             Ok good.val
         Err bad ->
-            Err (bad.stack |> Stack.toList)
+            Err bad.stack
 
 # -- PRIMITIVES -----------
 
@@ -82,7 +82,7 @@ problem = \p ->
 
 fail : Parser * * p *
 fail = 
-    @Parser \_ -> Err {stack: Stack.new, backtrackable: Yes}
+    @Parser \_ -> Err {stack: [], backtrackable: Yes}
 
 end: Parser * * * {}
 end = 
@@ -140,7 +140,7 @@ alt = \@Parser first, @Parser second ->
         else
             when second state is
                 Err {stack: stack2, backtrackable: b2} ->
-                    Err {stack: stack1 |> Stack.onTopOf stack2, backtrackable: b1 |> and b2}
+                    Err {stack: stack2 |> List.concat stack1, backtrackable: b1 |> and b2}
                 Ok res ->
                     Ok {res & backtrackable: b1 |> and res.backtrackable}          
 
@@ -282,14 +282,14 @@ chompUntilEndOr = \lst ->
 inContext : Parser context i p v, context -> Parser context i p v
 inContext = \@Parser parse, context ->
     @Parser \s0 ->
-        contextStack = s0.context |> Stack.push {offset: s0.offset, context: context}
+        contextStack = s0.contextStack |> List.append {offset: s0.offset, context: context}
         step <- Result.try (parse (s0 |> changeContext contextStack))
-        Ok { step & state: step.state |> changeContext s0.context}
+        Ok { step & state: step.state |> changeContext s0.contextStack}
 
 
-changeContext : State c i, Stack (Located c) -> State c i
+changeContext : State c i, List (Located c) -> State c i
 changeContext = \s, newContext ->
-    {s & context: newContext}
+    {s & contextStack: newContext}
 
 
 # -- LOOP ---------
@@ -392,9 +392,9 @@ findSubSource = \smallSrc, offset, bigSrc ->
 
 # ---- INTERNAL HELPER FUNCTIONS -------
 
-fromState : State c *, Problem p -> Stack (DeadEnd c p)
+fromState : State c *, Problem p -> List (DeadEnd c p)
 fromState = \s, p ->
-    Stack.new |> Stack.push {offset: s.offset, problem: p, contextStack: s.context}       
+    [{offset: s.offset, problem: p, contextStack: s.contextStack}]     
 
 #Helper function for many and oneOrMore
 manyImpl : Parser c i p a, List a, State c i, Backtrackable -> PStep c i p (List a)
