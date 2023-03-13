@@ -1,11 +1,11 @@
 interface Parser.Advanced
-    exposes [Parser, DeadEnd, #Types
+    exposes [Parser, DeadEnd, Token, Step, #Types
              buildPrimitiveParser,
              run, #Operating
-             const, fail, problem, end, symbol, #Primitives
+             const, fail, problem, end, symbol, token, #Primitives
              map, map2, keep, skip, andThen, #Combinators
              lazy, many, oneOrMore, alt, oneOf, between, sepBy, ignore, #Combinators
-             chompIf, chompWhile, chompUntil, chompUntilEndOr, getChompedSource, #Chompers
+             chompIf, chompWhile, chompUntil, chompUntilEndOr, getChompedSource, mapChompedSource, #Chompers
              getOffset, getSource, # Info
              inContext, # Context
              backtrackable, commit, # Backtracking
