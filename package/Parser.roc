@@ -1,5 +1,16 @@
 interface Parser 
-    exposes []
+    exposes [Parser, DeadEnd, #Types
+             buildPrimitiveParser,
+             run, #Operating
+             #const, fail, problem, end, symbol, #Primitives
+             #map, map2, keep, skip, andThen, #Combinators
+             #lazy, many, oneOrMore, alt, oneOf, between, sepBy, #ignore, #Combinators
+             #chompIf, chompWhile, chompUntil, chompUntilEndOr, #getChompedSource, #Chompers
+             #getOffset, getSource, # Info
+             #inContext, # Context
+             #backtrackable, commit, # Backtracking
+             #loop, # Looping
+             ]
     imports [Parser.Advanced.{}]
 
 
