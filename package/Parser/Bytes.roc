@@ -1,46 +1,43 @@
-interface Parser.Utf8
-    exposes [Parser, DeadEnd, RawStr, RawChar, #Types
+interface Parser.Bytes
+    exposes [Parser, DeadEnd, #Types
              buildPrimitiveParser,
              run, #Operating
-             const, fail, problem, end, token, #Primitives
+             const, fail, problem, end, symbol, token, #Primitives
              map, map2, keep, skip, andThen, #Combinators
              lazy, many, oneOrMore, alt, oneOf, between, sepBy, ignore, #Combinators
              chompIf, chompWhile, chompUntil, chompUntilEndOr, getChompedSource, mapChompedSource, #Chompers
              getOffset, getSource, # Info
              backtrackable, commit, # Backtracking
              loop, # Looping
-             errorPosition, keyword, spaces
              ]
-    imports [Parser.Advanced]
+    imports [Parser.Advanced.{}]
 
 
 # -- PARSERS ------------------
 
-RawChar: U8
-RawStr: List U8
+Byte: U8
+ByteList: List U8
 
-Parser value : Parser.Advanced.Parser Context RawChar Problem value
+Parser value : Parser.Advanced.Parser Context Byte Problem value
 
 DeadEnd: Parser.Advanced.DeadEnd Context Problem
+
+Context : {}
 
 # -- PROBLEMS ------------------
 
 Problem : [
-    UnexpectedChar, 
-    Expecting RawStr,
-    ExpectingKeyWord RawStr,
+    UnexpectedByte, 
+    Expecting ByteList,
+    ExpectingKeyWord ByteList,
     ParsingFailure Str,
 ]
 
-Context: {}
-
 # -- RUN ------------------
-
-
 
 buildPrimitiveParser = Parser.Advanced.buildPrimitiveParser
 
-run : Parser a, RawStr -> Result a (List DeadEnd)
+run : Parser a, ByteList -> Result a (List DeadEnd)
 run = \parser, input ->
     when Parser.Advanced.run parser input is
         Ok value ->
@@ -52,26 +49,6 @@ run = \parser, input ->
 problemToDeadEnd : Parser.Advanced.DeadEnd Context _ -> DeadEnd
 problemToDeadEnd = \d ->
     { offset: d.offset, problem: d.problem, contextStack: [] }
-
-
-Position: {row: Nat, col: Nat}
-
-newLine: RawChar
-newLine = '\n'
-
-isNewLine: RawChar -> Bool
-isNewLine = \c ->
-    c == newLine
-
-errorPosition: Nat, RawStr -> Position
-errorPosition = \offset, src ->
-    chomped = src |> List.takeFirst (offset + 1)
-    when chomped |> List.splitLast newLine is
-        Err _ ->
-            {row: 1, col: 1 + offset }
-        Ok {before, after} ->
-            {row: 2 + (before |> List.countIf isNewLine), 
-            col: 1 + (after |> List.len)}
 
 # -- PRIMITIVES -----------
 
@@ -126,28 +103,14 @@ lazy =
     Parser.Advanced.lazy     
 
 
-## A parser which runs the element parser *zero* or more times on the input,
-## returning a list containing all the parsed elements.
-##
-## Also see `oneOrMore`.
 many : Parser v -> Parser (List v)
 many = 
     Parser.Advanced.many
 
-## A parser which runs the element parser *one* or more times on the input,
-## returning a list containing all the parsed elements.
-##
-## Also see `many`.
 oneOrMore : Parser v -> Parser (List v)
 oneOrMore = 
     Parser.Advanced.oneOrMore    
 
-## Runs a parser for an 'opening' delimiter, then your main parser, then the 'closing' delimiter,
-## and only returns the result of your main parser.
-##
-## Useful to recognize structures surrounded by delimiters (like braces, parentheses, quotes, etc.)
-##
-## >>> betweenBraces  = \parser -> parser |> between (scalar '[') (scalar ']')
 between : Parser v, Parser *, Parser * -> Parser v
 between = 
     Parser.Advanced.between           
@@ -157,10 +120,10 @@ sepBy =
     Parser.Advanced.sepBy
 
 
-## Creates a new parser that ignores the result of the input parser, but propagates the state.
 ignore : Parser v -> Parser {}
 ignore = 
     Parser.Advanced.ignore     
+
 
 # flatten : Parser (Result v _) -> Parser v
 # flatten = 
@@ -168,33 +131,31 @@ ignore =
 
 # ---- CHOMPERS -------
 
-chompIf: (RawChar -> Bool) -> Parser {}
+chompIf: (Byte -> Bool) -> Parser {}
 chompIf = \isGood ->
-    Parser.Advanced.chompIf isGood UnexpectedChar     
+    Parser.Advanced.chompIf isGood UnexpectedByte     
 
 
-# Might be able to write a more efficient version than this?
-# Bad name?
-getChompedSource : Parser * -> Parser RawStr
+getChompedSource : Parser * -> Parser ByteList
 getChompedSource = 
     Parser.Advanced.getChompedSource
 
-mapChompedSource : Parser a, (RawStr, a -> b) -> Parser b
+mapChompedSource : Parser a, (ByteList, a -> b) -> Parser b
 mapChompedSource = 
     Parser.Advanced.mapChompedSource
        
 
-chompWhile: (RawChar -> Bool) -> Parser {}
+chompWhile: (Byte -> Bool) -> Parser {}
 chompWhile = 
     Parser.Advanced.chompWhile
 
 
-chompUntil : RawStr -> Parser {}
+chompUntil : ByteList -> Parser {}
 chompUntil = \tok ->  
     Parser.Advanced.chompUntil (toToken tok)
 
 
-chompUntilEndOr : RawStr -> Parser {}
+chompUntilEndOr : ByteList -> Parser {}
 chompUntilEndOr = 
     Parser.Advanced.chompUntilEndOr
 
@@ -224,47 +185,20 @@ getOffset: Parser Nat
 getOffset =
     Parser.Advanced.getOffset
 
-getSource: Parser RawStr
+getSource: Parser ByteList
 getSource =
     Parser.Advanced.getSource
 
-# -- TOKEN 
+# -- TOKEN & SYMBOL
 
-token : RawStr -> Parser {}
+token : ByteList -> Parser {}
 token = \tok ->
     Parser.Advanced.token (tok |> toToken)
 
-toToken: RawStr -> Parser.Advanced.Token RawChar Problem
+toToken: ByteList -> Parser.Advanced.Token Byte Problem
 toToken = \tok ->
     {tok, expecting: Expecting tok}
 
-# string :  RawStr -> Parser Str
-# string = \rawstr ->
-#     res <- token rawstr
-#             |> mapChompedSource (\r, _a -> Str.fromUtf8 r)
-#             |> andThen
-
-#     when res is
-#         Err _ ->
-#             problem "Failed converting raw string (List U8) to Str."
-        
-#         Ok str ->
-#             const str
-
-# rawStrToStr: RawStr -> Result Str [ParsingFailure Str]
-# rawStrToStr = \rawstr ->
-#     _ <- Result.onErr (Str.fromUtf8 rawstr)
-#     Err (ParsingFailure "Failed converting raw string (List U8) to Str.")
-
-# -- UTF8 specific
-
-separators: List RawChar
-separators = [' ', '\n']
-
-spaces: Parser {}
-spaces =
-    chompWhile (\c -> c == ' ' || c == '\n' || c == '\r')
-
-keyword: RawStr -> Parser {}
-keyword = \kwd ->
-    Parser.Advanced.key separators {tok: kwd, expecting: ExpectingKeyWord kwd}
+symbol :  ByteList -> Parser {}
+symbol =
+  token

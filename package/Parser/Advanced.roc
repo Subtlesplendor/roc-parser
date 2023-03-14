@@ -13,7 +13,7 @@ interface Parser.Advanced
              ]
     imports []
 
-## A full parser library. 
+## A parser library based on the Elm parser library. 
 
 ## The parser parses lists of `input` and returns a `value`.
 
@@ -198,6 +198,17 @@ ignore : Parser c i p v -> Parser c i p {}
 ignore = \parser ->
     map parser (\_ -> {})        
 
+
+# flatten : Parser c i p (Result a _) -> Parser c i p a
+# flatten = \@Parser parser ->
+#     @Parser \s0 ->
+#         {val: v1, state: s1, backtrackable: b1} <- Result.try (parser s0)
+#         when v1 is 
+#             Ok a ->
+#                 Ok {val: a, state: s1, backtrackable: b1}
+#             Err p ->
+#                 Err {stack: fromState s1 p, backtrackable: b1 }
+
 # ---- LOW LEVEL FUNCTIONS -------
 
 chompIf: (i -> Bool), Problem p -> Parser * i p {}
@@ -214,8 +225,7 @@ chompIf = \isGood, expecting ->
                 Err {stack: fromState s OutOfBounds, backtrackable: Yes}        
 
 
-# Might be able to write a more efficient version than this?
-# Bad name?
+
 getChompedSource : Parser c i p * -> Parser c i p (List i)
 getChompedSource = \parser ->
     parser |> mapChompedSource (\l, _ -> l)
@@ -235,8 +245,6 @@ mapChompedSource = \@Parser parse, f ->
                     Err {stack: fromState s1 OutOfBounds, backtrackable: b1}
        
 
-#future ref: 
-#nextWhile: (State i, i -> State i), (i -> Bool) -> Parser i {}
 chompWhile: (i -> Bool) -> Parser * i * {}
 chompWhile = \isGood ->
     @Parser \s ->
