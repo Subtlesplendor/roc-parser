@@ -220,12 +220,18 @@ chompChar = \b ->
 
 # string: RawStr -> Parser Str
 # string = \rawStr ->
-#     res <- chompString rawStr
+#     res <- (chompString rawStr
 #             |> mapChompedRawStr (\s, _ -> Str.fromUtf8 rawStr)
-#             |> andThen
+#             |> andThen)
 
 #     when res is 
 #         Err _ ->
-#             problem (ParsingFailure "Failed to create Str from raw string (List U8).")
+#             problem "Failed to create Str from raw string (List U8)."
 #         Ok str ->
 #             const str
+
+
+# doesNotCompile: RawStr -> Parser RawStr
+# doesNotCompile = \rawStr ->
+#     chompString rawStr
+#         |> mapChompedRawStr (\s, _ -> s)           
