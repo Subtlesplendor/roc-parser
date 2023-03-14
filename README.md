@@ -1,7 +1,7 @@
 # roc-parser
-A port of Elm's Parser library to roc, empowered by Roc's type system.
+Work In Progress: a port of Elm's Parser library to Roc, empowered by Roc's type system. 
 
-
+https://www.roc-lang.org/
 
 
 
