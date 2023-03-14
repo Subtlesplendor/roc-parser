@@ -3,7 +3,7 @@ interface Parser.Advanced.Utf8
              buildPrimitiveParser,
              run, #Operating
              const, fail, problem, end, token, #Primitives
-             map, map2, keep, skip, andThen, #Combinators
+             map, map2, keep, skip, andThen, flatten, #Combinators
              lazy, many, oneOrMore, alt, oneOf, between, sepBy, ignore, #Combinators
              chompIf, chompWhile, chompUntil, chompUntilEndOr, getChompedRawStr, mapChompedRawStr, #Chompers
              getOffset, getSource, # Info
@@ -109,9 +109,9 @@ ignore =
     Parser.Advanced.Generic.ignore     
 
 
-# # flatten : Parser (Result v _) -> Parser v
-# # flatten = 
-# #     Parser.Advanced.Generic.flatten
+flatten : Parser c p (Result v p) -> Parser c p v
+flatten = 
+    Parser.Advanced.Generic.flatten
 
 # # ---- CHOMPERS -------
 
