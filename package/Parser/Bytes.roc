@@ -3,7 +3,7 @@ interface Parser.Bytes
              buildPrimitiveParser,
              run, #Operating
              const, fail, problem, end, token, #Primitives
-             map, map2, keep, skip, andThen, #Combinators
+             map, map2, keep, skip, andThen, flatten, #Combinators
              lazy, many, oneOrMore, alt, oneOf, between, sepBy, ignore, #Combinators
              chompIf, chompWhile, chompUntil, chompUntilEndOr, getChompedBytes, mapChompedBytes, #Chompers
              getOffset, getSource, # Info
@@ -126,9 +126,9 @@ ignore =
     Parser.Advanced.Bytes.ignore     
 
 
-# flatten : Parser (Result v _) -> Parser v
-# flatten = 
-#     Parser.Advanced.Bytes.flatten
+flatten : Parser (Result v Problem) -> Parser v
+flatten = 
+    Parser.Advanced.Bytes.flatten
 
 # ---- CHOMPERS -------
 

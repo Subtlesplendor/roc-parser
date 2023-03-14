@@ -3,7 +3,7 @@ interface Parser.Utf8
              buildPrimitiveParser,
              run, #Operating
              const, fail, problem, end, token, #Primitives
-             map, map2, keep, skip, andThen, #Combinators
+             map, map2, keep, skip, andThen, flatten, #Combinators
              lazy, many, oneOrMore, alt, oneOf, between, sepBy, ignore, #Combinators
              chompIf, chompWhile, chompUntil, chompUntilEndOr, getChompedRawStr, mapChompedRawStr, #Chompers
              getOffset, getSource, # Info
@@ -127,9 +127,9 @@ ignore =
     Parser.Advanced.Utf8.ignore     
 
 
-# flatten : Parser (Result v _) -> Parser v
-# flatten = 
-#     Parser.Advanced.Utf8.flatten
+flatten : Parser (Result v Problem) -> Parser v
+flatten = 
+    Parser.Advanced.Utf8.flatten
 
 # ---- CHOMPERS -------
 
@@ -229,6 +229,12 @@ chompChar = \b ->
 #             problem "Failed to create Str from raw string (List U8)."
 #         Ok str ->
 #             const str
+
+# string: RawStr -> Parser Str
+# string = \rawStr ->
+#     chompString rawStr
+#         |> mapChompedRawStr (\s, _ -> Str.fromUtf8 rawStr)
+#         |> flatten
 
 
 # doesNotCompile: RawStr -> Parser RawStr

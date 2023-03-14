@@ -3,7 +3,7 @@ interface Parser.Advanced.Generic
              buildPrimitiveParser,
              run, #Operating
              const, fail, problem, end, token, key, #Primitives
-             map, map2, keep, skip, andThen, #Combinators
+             map, map2, keep, skip, andThen, flatten, #Combinators
              lazy, many, oneOrMore, alt, oneOf, between, sepBy, ignore, #Combinators
              chompIf, chompWhile, chompUntil, chompUntilEndOr, getChompedSource, mapChompedSource, #Chompers
              getOffset, getSource,
@@ -194,15 +194,15 @@ ignore = \parser ->
     map parser (\_ -> {})        
 
 
-# flatten : Parser c i p (Result a _) -> Parser c i p a
-# flatten = \@Parser parser ->
-#     @Parser \s0 ->
-#         {val: v1, state: s1, backtrackable: b1} <- Result.try (parser s0)
-#         when v1 is 
-#             Ok a ->
-#                 Ok {val: a, state: s1, backtrackable: b1}
-#             Err p ->
-#                 Err {stack: fromState s1 p, backtrackable: b1 }
+flatten : Parser c i p (Result a p) -> Parser c i p a
+flatten = \@Parser parser ->
+    @Parser \s0 ->
+        {val: v1, state: s1, backtrackable: b1} <- Result.try (parser s0)
+        when v1 is 
+            Ok a ->
+                Ok {val: a, state: s1, backtrackable: b1}
+            Err p ->
+                Err {stack: fromState s1 p, backtrackable: b1 }
 
 # ---- LOW LEVEL FUNCTIONS -------
 
