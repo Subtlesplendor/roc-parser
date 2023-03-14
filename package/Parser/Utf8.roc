@@ -1,270 +1,231 @@
 interface Parser.Utf8
-    exposes [Parser, DeadEnd, RawStr, RawChar, #Types
+    exposes [Parser, DeadEnd, #Types
              buildPrimitiveParser,
              run, #Operating
              const, fail, problem, end, token, #Primitives
              map, map2, keep, skip, andThen, #Combinators
              lazy, many, oneOrMore, alt, oneOf, between, sepBy, ignore, #Combinators
-             chompIf, chompWhile, chompUntil, chompUntilEndOr, getChompedSource, mapChompedSource, #Chompers
+             chompIf, chompWhile, chompUntil, chompUntilEndOr, getChompedRawStr, mapChompedRawStr, #Chompers
              getOffset, getSource, # Info
              backtrackable, commit, # Backtracking
              loop, # Looping
-             errorPosition, keyword, spaces
+             chompString, chompChar, keyword
              ]
-    imports [Parser.Advanced]
+    imports [Parser.Advanced.Utf8.{}]
 
 
 # -- PARSERS ------------------
 
-RawChar: U8
-RawStr: List U8
+RawChar: Parser.Advanced.Utf8.RawChar
+RawStr: Parser.Advanced.Utf8.RawStr
 
-Parser value : Parser.Advanced.Parser Context RawChar Problem value
+Parser value : Parser.Advanced.Utf8.Parser Context Problem value
 
-DeadEnd: Parser.Advanced.DeadEnd Context Problem
+DeadEnd: Parser.Advanced.Utf8.DeadEnd Context Problem
+
+Context : {}
 
 # -- PROBLEMS ------------------
 
 Problem : [
-    UnexpectedChar, 
+    UnexpectedRawChar, 
     Expecting RawStr,
-    ExpectingKeyWord RawStr,
+    ExpectingKeyword RawStr,
     ParsingFailure Str,
+    ExpectingEnd,
 ]
-
-Context: {}
 
 # -- RUN ------------------
 
-
-
-buildPrimitiveParser = Parser.Advanced.buildPrimitiveParser
+buildPrimitiveParser = Parser.Advanced.Utf8.buildPrimitiveParser
 
 run : Parser a, RawStr -> Result a (List DeadEnd)
 run = \parser, input ->
-    when Parser.Advanced.run parser input is
+    when Parser.Advanced.Utf8.run parser input is
         Ok value ->
             Ok value
 
         Err problems ->
             Err (problems |> List.map problemToDeadEnd)
 
-problemToDeadEnd : Parser.Advanced.DeadEnd Context _ -> DeadEnd
+problemToDeadEnd : Parser.Advanced.Utf8.DeadEnd Context _ -> DeadEnd
 problemToDeadEnd = \d ->
     { offset: d.offset, problem: d.problem, contextStack: [] }
-
-
-Position: {row: Nat, col: Nat}
-
-newLine: RawChar
-newLine = '\n'
-
-isNewLine: RawChar -> Bool
-isNewLine = \c ->
-    c == newLine
-
-errorPosition: Nat, RawStr -> Position
-errorPosition = \offset, src ->
-    chomped = src |> List.takeFirst (offset + 1)
-    when chomped |> List.splitLast newLine is
-        Err _ ->
-            {row: 1, col: 1 + offset }
-        Ok {before, after} ->
-            {row: 2 + (before |> List.countIf isNewLine), 
-            col: 1 + (after |> List.len)}
 
 # -- PRIMITIVES -----------
 
 #const : v -> Parser * v
-const = Parser.Advanced.const
+const = Parser.Advanced.Utf8.const
 
 problem : Str -> Parser *
 problem = \msg -> 
-     Parser.Advanced.problem (ParsingFailure msg)
+     Parser.Advanced.Utf8.problem (ParsingFailure msg)
 
 fail : Parser *
 fail = 
-    Parser.Advanced.fail
+    Parser.Advanced.Utf8.fail
     
 end: Parser {}
 end = 
-    Parser.Advanced.end    
+    Parser.Advanced.Utf8.end ExpectingEnd  
 
 
 # -- COMBINATORS ----------
 
 map: Parser a, (a -> b) -> Parser b
 map = 
-    Parser.Advanced.map    
+    Parser.Advanced.Utf8.map    
 
 map2: Parser a, Parser b, (a, b -> d) -> Parser d
 map2 = 
-    Parser.Advanced.map2
+    Parser.Advanced.Utf8.map2
 
 keep: Parser (a -> b), Parser a -> Parser b        
 keep = 
-    Parser.Advanced.keep
+    Parser.Advanced.Utf8.keep
 
 skip: Parser keep, Parser ignore -> Parser keep
 skip = 
-    Parser.Advanced.skip
+    Parser.Advanced.Utf8.skip
 
 andThen: Parser a, (a -> Parser b) -> Parser b
 andThen = 
-    Parser.Advanced.andThen
+    Parser.Advanced.Utf8.andThen
 
 alt: Parser v, Parser v -> Parser v
 alt = 
-    Parser.Advanced.alt          
+    Parser.Advanced.Utf8.alt          
 
 oneOf : List (Parser v) -> Parser v
 oneOf = 
-    Parser.Advanced.oneOf    
+    Parser.Advanced.Utf8.oneOf    
 
 lazy : ({} -> Parser v) -> Parser v
 lazy = 
-    Parser.Advanced.lazy     
+    Parser.Advanced.Utf8.lazy     
 
 
-## A parser which runs the element parser *zero* or more times on the input,
-## returning a list containing all the parsed elements.
-##
-## Also see `oneOrMore`.
 many : Parser v -> Parser (List v)
 many = 
-    Parser.Advanced.many
+    Parser.Advanced.Utf8.many
 
-## A parser which runs the element parser *one* or more times on the input,
-## returning a list containing all the parsed elements.
-##
-## Also see `many`.
 oneOrMore : Parser v -> Parser (List v)
 oneOrMore = 
-    Parser.Advanced.oneOrMore    
+    Parser.Advanced.Utf8.oneOrMore    
 
-## Runs a parser for an 'opening' delimiter, then your main parser, then the 'closing' delimiter,
-## and only returns the result of your main parser.
-##
-## Useful to recognize structures surrounded by delimiters (like braces, parentheses, quotes, etc.)
-##
-## >>> betweenBraces  = \parser -> parser |> between (scalar '[') (scalar ']')
 between : Parser v, Parser *, Parser * -> Parser v
 between = 
-    Parser.Advanced.between           
+    Parser.Advanced.Utf8.between           
 
 sepBy : Parser v, Parser * -> Parser (List v)
 sepBy = 
-    Parser.Advanced.sepBy
+    Parser.Advanced.Utf8.sepBy
 
 
-## Creates a new parser that ignores the result of the input parser, but propagates the state.
 ignore : Parser v -> Parser {}
 ignore = 
-    Parser.Advanced.ignore     
+    Parser.Advanced.Utf8.ignore     
+
 
 # flatten : Parser (Result v _) -> Parser v
 # flatten = 
-#     Parser.Advanced.flatten
+#     Parser.Advanced.Utf8.flatten
 
 # ---- CHOMPERS -------
 
 chompIf: (RawChar -> Bool) -> Parser {}
 chompIf = \isGood ->
-    Parser.Advanced.chompIf isGood UnexpectedChar     
+    Parser.Advanced.Utf8.chompIf isGood UnexpectedRawChar     
 
 
-# Might be able to write a more efficient version than this?
-# Bad name?
-getChompedSource : Parser * -> Parser RawStr
-getChompedSource = 
-    Parser.Advanced.getChompedSource
+getChompedRawStr : Parser * -> Parser RawStr
+getChompedRawStr = 
+    Parser.Advanced.Utf8.getChompedRawStr
 
-mapChompedSource : Parser a, (RawStr, a -> b) -> Parser b
-mapChompedSource = 
-    Parser.Advanced.mapChompedSource
+mapChompedRawStr : Parser a, (RawStr, a -> b) -> Parser b
+mapChompedRawStr = 
+    Parser.Advanced.Utf8.mapChompedRawStr
        
 
 chompWhile: (RawChar -> Bool) -> Parser {}
 chompWhile = 
-    Parser.Advanced.chompWhile
+    Parser.Advanced.Utf8.chompWhile
 
 
 chompUntil : RawStr -> Parser {}
 chompUntil = \tok ->  
-    Parser.Advanced.chompUntil (toToken tok)
+    Parser.Advanced.Utf8.chompUntil (toToken tok)
 
 
 chompUntilEndOr : RawStr -> Parser {}
 chompUntilEndOr = 
-    Parser.Advanced.chompUntilEndOr
+    Parser.Advanced.Utf8.chompUntilEndOr
 
 
 # -- LOOP ---------
 
-Step state a : Parser.Advanced.Step state a
+Step state a : Parser.Advanced.Utf8.Step state a
 
 loop : state, (state -> Parser (Step state a)) -> Parser a
 loop = 
-    Parser.Advanced.loop
+    Parser.Advanced.Utf8.loop
 
 
 # -- BACKTRACKABLE ---------
 
 backtrackable : Parser a -> Parser a
 backtrackable = 
-    Parser.Advanced.backtrackable
+    Parser.Advanced.Utf8.backtrackable
 
 commit : a -> Parser a
 commit = 
-    Parser.Advanced.commit
+    Parser.Advanced.Utf8.commit
 
 # -- POSITION
 
 getOffset: Parser Nat
 getOffset =
-    Parser.Advanced.getOffset
+    Parser.Advanced.Utf8.getOffset
 
 getSource: Parser RawStr
 getSource =
-    Parser.Advanced.getSource
+    Parser.Advanced.Utf8.getSource
 
-# -- TOKEN 
+# -- TOKEN
 
 token : RawStr -> Parser {}
 token = \tok ->
-    Parser.Advanced.token (tok |> toToken)
+    Parser.Advanced.Utf8.token (tok |> toToken)
 
-toToken: RawStr -> Parser.Advanced.Token RawChar Problem
+toToken: RawStr -> Parser.Advanced.Utf8.Token Problem
 toToken = \tok ->
     {tok, expecting: Expecting tok}
 
-# string :  RawStr -> Parser Str
-# string = \rawstr ->
-#     res <- token rawstr
-#             |> mapChompedSource (\r, _a -> Str.fromUtf8 r)
-#             |> andThen
 
-#     when res is
-#         Err _ ->
-#             problem "Failed converting raw string (List U8) to Str."
-        
-#         Ok str ->
-#             const str
+# Utf8 specific
 
-# rawStrToStr: RawStr -> Result Str [ParsingFailure Str]
-# rawStrToStr = \rawstr ->
-#     _ <- Result.onErr (Str.fromUtf8 rawstr)
-#     Err (ParsingFailure "Failed converting raw string (List U8) to Str.")
-
-# -- UTF8 specific
-
-separators: List RawChar
 separators = [' ', '\n']
 
-spaces: Parser {}
-spaces =
-    chompWhile (\c -> c == ' ' || c == '\n' || c == '\r')
-
 keyword: RawStr -> Parser {}
-keyword = \kwd ->
-    Parser.Advanced.key separators {tok: kwd, expecting: ExpectingKeyWord kwd}
+keyword = \rawstr ->
+    Parser.Advanced.Utf8.keyword separators {tok: rawstr, expecting: ExpectingKeyword rawstr}
+
+chompString :  RawStr -> Parser {}
+chompString =
+    token
+
+chompChar : RawChar -> Parser {}
+chompChar = \b ->
+    chompIf (\x -> x == b)
+
+# string: RawStr -> Parser Str
+# string = \rawStr ->
+#     res <- chompString rawStr
+#             |> mapChompedRawStr (\s, _ -> Str.fromUtf8 rawStr)
+#             |> andThen
+
+#     when res is 
+#         Err _ ->
+#             problem (ParsingFailure "Failed to create Str from raw string (List U8).")
+#         Ok str ->
+#             const str

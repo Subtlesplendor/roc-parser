@@ -1,8 +1,8 @@
-interface Parser.Advanced
+interface Parser.Advanced.Generic
     exposes [Parser, DeadEnd, Token, Step, #Types
              buildPrimitiveParser,
              run, #Operating
-             const, fail, problem, end, symbol, token, key, #Primitives
+             const, fail, problem, end, token, key, #Primitives
              map, map2, keep, skip, andThen, #Combinators
              lazy, many, oneOrMore, alt, oneOf, between, sepBy, ignore, #Combinators
              chompIf, chompWhile, chompUntil, chompUntilEndOr, getChompedSource, mapChompedSource, #Chompers
@@ -32,14 +32,9 @@ Located context: {offset: Nat, context: context}
 
 Good context input value : {val: value, state: State context input, backtrackable: Backtrackable}
 Bad context problem : {stack: List (DeadEnd context problem), backtrackable: Backtrackable}
-  
-
-Problem p : [OutOfBounds,
-             ExpectingEnd,
-             FailAt Nat]p
              
 
-DeadEnd c p : {offset: Nat, problem: Problem p, contextStack: List (Located c)}
+DeadEnd c p : {offset: Nat, problem: p, contextStack: List (Located c)}
 
 PStep context input problem value : 
     Result (Good context input value) (Bad context problem)
@@ -76,7 +71,7 @@ const : v -> Parser * * * v
 const = \val ->
     @Parser \state -> Ok {val, state, backtrackable: Yes}
 
-problem : Problem p -> Parser * * p *
+problem : p -> Parser * * p *
 problem = \p -> 
      @Parser \s -> Err {stack: fromState s p, backtrackable: Yes}
 
@@ -84,13 +79,13 @@ fail : Parser * * p *
 fail = 
     @Parser \_ -> Err {stack: [], backtrackable: Yes}
 
-end: Parser * * * {}
-end = 
+end: p -> Parser * * p {}
+end = \p ->
     @Parser \state ->
         if state.offset == List.len state.src then
             Ok {val: {}, state, backtrackable: Yes}
         else
-            Err {stack: fromState state ExpectingEnd, backtrackable: Yes}     
+            Err {stack: fromState state p, backtrackable: Yes}     
 
 
 # -- COMBINATORS ----------
@@ -211,7 +206,7 @@ ignore = \parser ->
 
 # ---- LOW LEVEL FUNCTIONS -------
 
-chompIf: (i -> Bool), Problem p -> Parser * i p {}
+chompIf: (i -> Bool), p -> Parser * i p {}
 chompIf = \isGood, expecting ->
     @Parser \s ->
         when s.src |> List.get s.offset is
@@ -222,7 +217,7 @@ chompIf = \isGood, expecting ->
                     Err {stack: fromState s expecting, backtrackable:Yes}
             
             Err OutOfBounds ->
-                Err {stack: fromState s OutOfBounds, backtrackable: Yes}        
+                Err {stack: fromState s expecting, backtrackable: Yes}        
 
 
 
@@ -230,19 +225,20 @@ getChompedSource : Parser c i p * -> Parser c i p (List i)
 getChompedSource = \parser ->
     parser |> mapChompedSource (\l, _ -> l)
 
+
+#The case when the parser has moved backwards might be better handled than this?
 mapChompedSource : Parser c i p a, (List i, a -> b) -> Parser c i p b
 mapChompedSource = \@Parser parse, f ->
         @Parser \s0 ->
             {val: a, state: s1, backtrackable: b1} <- Result.try(parse s0)
 
-            when s1.offset - s0.offset is
-                x if x >= 0 ->
-                    chomped = s0.src |> List.sublist {start: s0.offset, len: x |> Num.toNat}
-                    Ok {val: f chomped a, 
-                        state: s1, backtrackable: b1}
+            length = 
+                Num.toNatChecked (s1.offset - s0.offset)
+                |> Result.withDefault 0
 
-                _ ->
-                    Err {stack: fromState s1 OutOfBounds, backtrackable: b1}
+            chomped = s0.src |> List.sublist {start: s0.offset, len: length}
+            Ok {val: f chomped a, 
+                state: s1, backtrackable: b1}    
        
 
 chompWhile: (i -> Bool) -> Parser * i * {}
@@ -339,7 +335,7 @@ getSource =
         Ok {val: s.src, state: s, backtrackable: Yes}        
 # -- TOKEN & SYMBOL
 
-Token i p : { tok: List i, expecting: Problem p}
+Token i p : { tok: List i, expecting: p}
 
 token : Token i p -> Parser * i p {} | i has Eq
 token = \{tok, expecting} ->
@@ -350,11 +346,6 @@ token = \{tok, expecting} ->
                     backtrackable: if List.isEmpty tok then Yes else No}
             Err _ ->
                 Err {stack: fromState s expecting, backtrackable: Yes}
-
-symbol : Token i p -> Parser * i p {} | i has Eq
-symbol =
-  token
-
 
 key: List i, Token i p -> Parser * i p {} | i has Eq
 key = \separators, {tok, expecting} ->
@@ -370,7 +361,7 @@ key = \separators, {tok, expecting} ->
                     }
                 else when s.src |> List.get newOffset is
                     Err OutOfBounds ->
-                        Err {stack: fromState s OutOfBounds, backtrackable: Yes}
+                        Err {stack: fromState s expecting, backtrackable: Yes}
                     
                     Ok char ->
                         if separators |> List.contains char then
@@ -432,7 +423,7 @@ findSubSource = \smallSrc, offset, bigSrc ->
 
 # ---- INTERNAL HELPER FUNCTIONS -------
 
-fromState : State c *, Problem p -> List (DeadEnd c p)
+fromState : State c *, p -> List (DeadEnd c p)
 fromState = \s, p ->
     [{offset: s.offset, problem: p, contextStack: s.contextStack}]     
 
