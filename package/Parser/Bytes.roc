@@ -1,4 +1,4 @@
-interface Parser 
+interface Parser.Bytes
     exposes [Parser, DeadEnd, #Types
              buildPrimitiveParser,
              run, #Operating
@@ -15,23 +15,29 @@ interface Parser
 
 # -- PARSERS ------------------
 
-Parser input value : Parser.Advanced.Parser {} input (Problem input) value
+Byte: U8
+ByteList: List U8
 
-DeadEnd i: Parser.Advanced.DeadEnd {} (Problem i)
+Parser value : Parser.Advanced.Parser Context Byte Problem value
+
+DeadEnd: Parser.Advanced.DeadEnd Context Problem
+
+Context : {}
 
 # -- PROBLEMS ------------------
 
-Problem i : [
-    UnexpectedChar, 
-    Expecting (List i),
+Problem : [
+    UnexpectedByte, 
+    Expecting ByteList,
+    ExpectingKeyWord ByteList,
     ParsingFailure Str,
 ]
 
-buildPrimitiveParser = Parser.Advanced.buildPrimitiveParser
-
 # -- RUN ------------------
 
-run : Parser i a, List i -> Result a (List (DeadEnd i))
+buildPrimitiveParser = Parser.Advanced.buildPrimitiveParser
+
+run : Parser a, ByteList -> Result a (List DeadEnd)
 run = \parser, input ->
     when Parser.Advanced.run parser input is
         Ok value ->
@@ -40,132 +46,116 @@ run = \parser, input ->
         Err problems ->
             Err (problems |> List.map problemToDeadEnd)
 
-problemToDeadEnd : Parser.Advanced.DeadEnd {} _ -> DeadEnd i
+problemToDeadEnd : Parser.Advanced.DeadEnd Context _ -> DeadEnd
 problemToDeadEnd = \d ->
     { offset: d.offset, problem: d.problem, contextStack: [] }
-
-
-
 
 # -- PRIMITIVES -----------
 
 #const : v -> Parser * v
 const = Parser.Advanced.const
 
-problem : Str -> Parser * *
+problem : Str -> Parser *
 problem = \msg -> 
      Parser.Advanced.problem (ParsingFailure msg)
 
-fail : Parser * *
+fail : Parser *
 fail = 
     Parser.Advanced.fail
     
-end: Parser * {}
+end: Parser {}
 end = 
     Parser.Advanced.end    
 
 
 # -- COMBINATORS ----------
 
-map: Parser i a, (a -> b) -> Parser i b
+map: Parser a, (a -> b) -> Parser b
 map = 
     Parser.Advanced.map    
 
-map2: Parser i a, Parser i b, (a, b -> d) -> Parser i d
+map2: Parser a, Parser b, (a, b -> d) -> Parser d
 map2 = 
     Parser.Advanced.map2
 
-keep: Parser i (a -> b), Parser i a -> Parser i b        
+keep: Parser (a -> b), Parser a -> Parser b        
 keep = 
     Parser.Advanced.keep
 
-skip: Parser i keep, Parser i ignore -> Parser i keep
+skip: Parser keep, Parser ignore -> Parser keep
 skip = 
     Parser.Advanced.skip
-andThen: Parser i a, (a -> Parser i b) -> Parser i b
+
+andThen: Parser a, (a -> Parser b) -> Parser b
 andThen = 
     Parser.Advanced.andThen
 
-alt: Parser i v, Parser i v -> Parser i v
+alt: Parser v, Parser v -> Parser v
 alt = 
     Parser.Advanced.alt          
 
-oneOf : List (Parser i v) -> Parser i v
+oneOf : List (Parser v) -> Parser v
 oneOf = 
     Parser.Advanced.oneOf    
 
-lazy : ({} -> Parser i v) -> Parser i v
+lazy : ({} -> Parser v) -> Parser v
 lazy = 
     Parser.Advanced.lazy     
 
 
-## A parser which runs the element parser *zero* or more times on the input,
-## returning a list containing all the parsed elements.
-##
-## Also see `oneOrMore`.
-many : Parser i v -> Parser i (List v)
+many : Parser v -> Parser (List v)
 many = 
     Parser.Advanced.many
 
-## A parser which runs the element parser *one* or more times on the input,
-## returning a list containing all the parsed elements.
-##
-## Also see `many`.
-oneOrMore : Parser i v -> Parser i (List v)
+oneOrMore : Parser v -> Parser (List v)
 oneOrMore = 
     Parser.Advanced.oneOrMore    
 
-## Runs a parser for an 'opening' delimiter, then your main parser, then the 'closing' delimiter,
-## and only returns the result of your main parser.
-##
-## Useful to recognize structures surrounded by delimiters (like braces, parentheses, quotes, etc.)
-##
-## >>> betweenBraces  = \parser -> parser |> between (scalar '[') (scalar ']')
-between : Parser i v, Parser i *, Parser i * -> Parser i v
+between : Parser v, Parser *, Parser * -> Parser v
 between = 
     Parser.Advanced.between           
 
-sepBy : Parser i v, Parser i * -> Parser i (List v)
+sepBy : Parser v, Parser * -> Parser (List v)
 sepBy = 
     Parser.Advanced.sepBy
 
 
-## Creates a new parser that ignores the result of the input parser, but propagates the state.
-ignore : Parser i v -> Parser i {}
+ignore : Parser v -> Parser {}
 ignore = 
     Parser.Advanced.ignore     
 
+
+# flatten : Parser (Result v _) -> Parser v
+# flatten = 
+#     Parser.Advanced.flatten
+
 # ---- CHOMPERS -------
 
-chompIf: (i -> Bool) -> Parser i {}
+chompIf: (Byte -> Bool) -> Parser {}
 chompIf = \isGood ->
-    Parser.Advanced.chompIf isGood UnexpectedChar     
+    Parser.Advanced.chompIf isGood UnexpectedByte     
 
 
-# Might be able to write a more efficient version than this?
-# Bad name?
-getChompedSource : Parser i * -> Parser i (List i)
+getChompedSource : Parser * -> Parser ByteList
 getChompedSource = 
     Parser.Advanced.getChompedSource
 
-mapChompedSource : Parser i a, (List i, a -> b) -> Parser i b
+mapChompedSource : Parser a, (ByteList, a -> b) -> Parser b
 mapChompedSource = 
     Parser.Advanced.mapChompedSource
        
 
-chompWhile: (i -> Bool) -> Parser i {}
+chompWhile: (Byte -> Bool) -> Parser {}
 chompWhile = 
     Parser.Advanced.chompWhile
 
 
-chompUntil : List i -> Parser i {}
-            | i has Eq
+chompUntil : ByteList -> Parser {}
 chompUntil = \tok ->  
     Parser.Advanced.chompUntil (toToken tok)
 
 
-chompUntilEndOr : List i -> Parser i {}
-                    | i has Eq 
+chompUntilEndOr : ByteList -> Parser {}
 chompUntilEndOr = 
     Parser.Advanced.chompUntilEndOr
 
@@ -174,41 +164,41 @@ chompUntilEndOr =
 
 Step state a : Parser.Advanced.Step state a
 
-loop : state, (state -> Parser i (Step state a)) -> Parser i a
+loop : state, (state -> Parser (Step state a)) -> Parser a
 loop = 
     Parser.Advanced.loop
 
 
 # -- BACKTRACKABLE ---------
 
-backtrackable : Parser i a -> Parser i a
+backtrackable : Parser a -> Parser a
 backtrackable = 
     Parser.Advanced.backtrackable
 
-commit : a -> Parser * a
+commit : a -> Parser a
 commit = 
     Parser.Advanced.commit
 
 # -- POSITION
 
-getOffset: Parser * Nat
+getOffset: Parser Nat
 getOffset =
     Parser.Advanced.getOffset
 
-getSource: Parser i (List i)
+getSource: Parser ByteList
 getSource =
     Parser.Advanced.getSource
 
 # -- TOKEN & SYMBOL
 
-token : List i -> Parser i {} | i has Eq
+token : ByteList -> Parser {}
 token = \tok ->
     Parser.Advanced.token (tok |> toToken)
 
-toToken: List i -> Parser.Advanced.Token i (Problem i)
+toToken: ByteList -> Parser.Advanced.Token Byte Problem
 toToken = \tok ->
     {tok, expecting: Expecting tok}
 
-symbol :  List i -> Parser i {} | i has Eq
+symbol :  ByteList -> Parser {}
 symbol =
   token

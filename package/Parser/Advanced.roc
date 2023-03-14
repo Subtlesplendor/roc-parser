@@ -1,19 +1,19 @@
 interface Parser.Advanced
-    exposes [Parser, DeadEnd, #Types
+    exposes [Parser, DeadEnd, Token, Step, #Types
              buildPrimitiveParser,
              run, #Operating
-             const, fail, problem, end, symbol, #Primitives
+             const, fail, problem, end, symbol, token, key, #Primitives
              map, map2, keep, skip, andThen, #Combinators
              lazy, many, oneOrMore, alt, oneOf, between, sepBy, ignore, #Combinators
-             chompIf, chompWhile, chompUntil, chompUntilEndOr, getChompedSource, #Chompers
-             getOffset, getSource, # Info
+             chompIf, chompWhile, chompUntil, chompUntilEndOr, getChompedSource, mapChompedSource, #Chompers
+             getOffset, getSource,
              inContext, # Context
              backtrackable, commit, # Backtracking
              loop, # Looping
              ]
-    imports [Stack.{Stack}]
+    imports []
 
-## A full parser library. 
+## A parser library based on the Elm parser library. 
 
 ## The parser parses lists of `input` and returns a `value`.
 
@@ -25,13 +25,13 @@ interface Parser.Advanced
 Parser context input problem value := 
     State context input -> PStep context input problem value
 
-State context input : { src: List input, offset: Nat, context: Stack (Located context) }
+State context input : { src: List input, offset: Nat, contextStack: List (Located context) }
 
 Located context: {offset: Nat, context: context}
 
 
 Good context input value : {val: value, state: State context input, backtrackable: Backtrackable}
-Bad context problem : {stack: Stack (DeadEnd context problem), backtrackable: Backtrackable}
+Bad context problem : {stack: List (DeadEnd context problem), backtrackable: Backtrackable}
   
 
 Problem p : [OutOfBounds,
@@ -39,7 +39,7 @@ Problem p : [OutOfBounds,
              FailAt Nat]p
              
 
-DeadEnd c p : {offset: Nat, problem: Problem p, contextStack: Stack (Located c)}
+DeadEnd c p : {offset: Nat, problem: Problem p, contextStack: List (Located c)}
 
 PStep context input problem value : 
     Result (Good context input value) (Bad context problem)
@@ -64,11 +64,11 @@ buildPrimitiveParser = \f ->
 # Run a parser and get a Result.
 run: Parser c i p v, List i-> Result v (List (DeadEnd c p))
 run = \@Parser parse, src ->
-    when parse {src, offset: 0, context: Stack.new} is
+    when parse {src, offset: 0, contextStack: []} is
         Ok good ->
             Ok good.val
         Err bad ->
-            Err (bad.stack |> Stack.toList)
+            Err bad.stack
 
 # -- PRIMITIVES -----------
 
@@ -82,7 +82,7 @@ problem = \p ->
 
 fail : Parser * * p *
 fail = 
-    @Parser \_ -> Err {stack: Stack.new, backtrackable: Yes}
+    @Parser \_ -> Err {stack: [], backtrackable: Yes}
 
 end: Parser * * * {}
 end = 
@@ -140,7 +140,7 @@ alt = \@Parser first, @Parser second ->
         else
             when second state is
                 Err {stack: stack2, backtrackable: b2} ->
-                    Err {stack: stack1 |> Stack.onTopOf stack2, backtrackable: b1 |> and b2}
+                    Err {stack: stack2 |> List.concat stack1, backtrackable: b1 |> and b2}
                 Ok res ->
                     Ok {res & backtrackable: b1 |> and res.backtrackable}          
 
@@ -198,6 +198,17 @@ ignore : Parser c i p v -> Parser c i p {}
 ignore = \parser ->
     map parser (\_ -> {})        
 
+
+# flatten : Parser c i p (Result a _) -> Parser c i p a
+# flatten = \@Parser parser ->
+#     @Parser \s0 ->
+#         {val: v1, state: s1, backtrackable: b1} <- Result.try (parser s0)
+#         when v1 is 
+#             Ok a ->
+#                 Ok {val: a, state: s1, backtrackable: b1}
+#             Err p ->
+#                 Err {stack: fromState s1 p, backtrackable: b1 }
+
 # ---- LOW LEVEL FUNCTIONS -------
 
 chompIf: (i -> Bool), Problem p -> Parser * i p {}
@@ -214,8 +225,7 @@ chompIf = \isGood, expecting ->
                 Err {stack: fromState s OutOfBounds, backtrackable: Yes}        
 
 
-# Might be able to write a more efficient version than this?
-# Bad name?
+
 getChompedSource : Parser c i p * -> Parser c i p (List i)
 getChompedSource = \parser ->
     parser |> mapChompedSource (\l, _ -> l)
@@ -235,8 +245,6 @@ mapChompedSource = \@Parser parse, f ->
                     Err {stack: fromState s1 OutOfBounds, backtrackable: b1}
        
 
-#future ref: 
-#nextWhile: (State i, i -> State i), (i -> Bool) -> Parser i {}
 chompWhile: (i -> Bool) -> Parser * i * {}
 chompWhile = \isGood ->
     @Parser \s ->
@@ -282,14 +290,14 @@ chompUntilEndOr = \lst ->
 inContext : Parser context i p v, context -> Parser context i p v
 inContext = \@Parser parse, context ->
     @Parser \s0 ->
-        contextStack = s0.context |> Stack.push {offset: s0.offset, context: context}
+        contextStack = s0.contextStack |> List.append {offset: s0.offset, context: context}
         step <- Result.try (parse (s0 |> changeContext contextStack))
-        Ok { step & state: step.state |> changeContext s0.context}
+        Ok { step & state: step.state |> changeContext s0.contextStack}
 
 
-changeContext : State c i, Stack (Located c) -> State c i
+changeContext : State c i, List (Located c) -> State c i
 changeContext = \s, newContext ->
-    {s & context: newContext}
+    {s & contextStack: newContext}
 
 
 # -- LOOP ---------
@@ -347,6 +355,38 @@ symbol : Token i p -> Parser * i p {} | i has Eq
 symbol =
   token
 
+
+key: List i, Token i p -> Parser * i p {} | i has Eq
+key = \separators, {tok, expecting} ->
+    @Parser \s ->
+        when isSubSource tok s.offset s.src is
+            Ok newOffset ->
+                if newOffset == (s.src |> List.len) then
+                    Ok 
+                    {
+                        val: {}, 
+                        state: {s & offset: newOffset}, 
+                        backtrackable: if List.isEmpty tok then Yes else No
+                    }
+                else when s.src |> List.get newOffset is
+                    Err OutOfBounds ->
+                        Err {stack: fromState s OutOfBounds, backtrackable: Yes}
+                    
+                    Ok char ->
+                        if separators |> List.contains char then
+                            Ok 
+                            {
+                                val: {}, 
+                                state: {s & offset: newOffset},
+                                backtrackable: if List.isEmpty tok then Yes else No
+                            }
+                        else
+                            Err {stack: fromState s expecting, backtrackable: Yes}
+                   
+
+            Err _ ->
+                Err {stack: fromState s expecting, backtrackable: Yes}
+
 # -- LOW LEVEL ---------
 
 isSubSource : List i, Nat, List i -> Result Nat [OutOfBounds]
@@ -392,9 +432,9 @@ findSubSource = \smallSrc, offset, bigSrc ->
 
 # ---- INTERNAL HELPER FUNCTIONS -------
 
-fromState : State c *, Problem p -> Stack (DeadEnd c p)
+fromState : State c *, Problem p -> List (DeadEnd c p)
 fromState = \s, p ->
-    Stack.new |> Stack.push {offset: s.offset, problem: p, contextStack: s.context}       
+    [{offset: s.offset, problem: p, contextStack: s.contextStack}]     
 
 #Helper function for many and oneOrMore
 manyImpl : Parser c i p a, List a, State c i, Backtrackable -> PStep c i p (List a)

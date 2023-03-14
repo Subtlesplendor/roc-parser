@@ -1,7 +1,8 @@
 package "parser"
     exposes [
         Parser,
-        Stack,
         Parser.Advanced,
+        Parser.Utf8,
+        Parser.Bytes
     ]
     packages {}

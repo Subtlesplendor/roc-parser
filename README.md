@@ -1,23 +1,13 @@
 # roc-parser
-A port of Elm's Parser library to roc, empowered by Roc's type system
+A port of Elm's Parser library to roc, empowered by Roc's type system.
 
 
 
 
 
-## TODO
+## Differences to the Elm parser
+This parser library works for parsing generic lists, not just strings. This means that some of the concepts of the Elm parser do not carry over. So the parsers now do not keep track of row, column, or indent --- because those do not make sense for arbitrary lists.
 
-  1. Implement Elm's parser as a parser of List U8.
-  2. Generalize Elm's parser to generic input. (if possible!)
-  3. "Rocify" the parser to better match the idioms of Roc.
-      - Accumulate errors bit by bit?
-      - combinators for backpassing notation?
-      - Clever types for context?
+A slight complication is hence that to generate a nice error message that refers to e.g. a row and column requires a second pass through of the source to determine these quantities at the location of the error.
 
-
-## A few ideas
-
-  1. For a generic `List a`, perhaps one should have a more generic position type.
-  2. For sure it would be good to define Position = {...} and use it also within the state.
-  3. Likely it would be good to have a Generic module that only has parser combinators and primitive parsers.
   
