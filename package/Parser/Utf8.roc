@@ -73,8 +73,8 @@ end =
 # -- COMBINATORS ----------
 
 map: Parser a, (a -> b) -> Parser b
-map = 
-    Parser.Advanced.Utf8.map    
+map = \parser, mapper ->
+    Parser.Advanced.Utf8.map parser mapper 
 
 map2: Parser a, Parser b, (a, b -> d) -> Parser d
 map2 = 
@@ -128,8 +128,8 @@ ignore =
 
 
 flatten : Parser (Result v Problem) -> Parser v
-flatten = 
-    Parser.Advanced.Utf8.flatten
+flatten = \parser ->
+    Parser.Advanced.Utf8.flatten parser
 
 # ---- CHOMPERS -------
 
@@ -139,12 +139,12 @@ chompIf = \isGood ->
 
 
 getChompedRawStr : Parser * -> Parser RawStr
-getChompedRawStr = 
-    Parser.Advanced.Utf8.getChompedRawStr
+getChompedRawStr = \parser ->
+    Parser.Advanced.Utf8.getChompedRawStr parser
 
 mapChompedRawStr : Parser a, (RawStr, a -> b) -> Parser b
-mapChompedRawStr = 
-    Parser.Advanced.Utf8.mapChompedRawStr
+mapChompedRawStr = \parser, mapper ->
+    Parser.Advanced.Utf8.mapChompedRawStr parser mapper
        
 
 chompWhile: (RawChar -> Bool) -> Parser {}
@@ -218,26 +218,26 @@ chompChar : RawChar -> Parser {}
 chompChar = \b ->
     chompIf (\x -> x == b)
 
-# string: RawStr -> Parser Str
-# string = \rawStr ->
-#     res <- (chompString rawStr
-#             |> mapChompedRawStr (\s, _ -> Str.fromUtf8 rawStr)
-#             |> andThen)
-
-#     when res is 
-#         Err _ ->
-#             problem "Failed to create Str from raw string (List U8)."
-#         Ok str ->
-#             const str
-
-# string: RawStr -> Parser Str
-# string = \rawStr ->
-#     chompString rawStr
-#         |> mapChompedRawStr (\s, _ -> Str.fromUtf8 rawStr)
-#         |> flatten
 
 
-# doesNotCompile: RawStr -> Parser RawStr
-# doesNotCompile = \rawStr ->
-#     chompString rawStr
-#         |> mapChompedRawStr (\s, _ -> s)           
+rwstr : RawStr -> Parser RawStr
+rwstr = \raw ->
+    chompString raw
+    |> getChompedRawStr
+
+string: RawStr -> Parser Str
+string = \raw ->
+    rwstr raw
+    |> map rawStrToStr
+    |> flatten
+
+
+
+# --- Internal -------
+
+rawStrToStr : RawStr -> Result Str Problem
+rawStrToStr = \raw ->
+    _ <- Result.onErr (Str.fromUtf8 raw)
+    Err (ParsingFailure "Failed to create Str from raw string (List U8).")
+
+       
