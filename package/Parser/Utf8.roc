@@ -1,5 +1,5 @@
 interface Parser.Utf8
-    exposes [Parser, DeadEnd, #Types
+    exposes [Parser, DeadEnd, RawStr, RawChar, #Types
              buildPrimitiveParser,
              run, #Operating
              const, fail, problem, end, token, #Primitives
@@ -9,7 +9,7 @@ interface Parser.Utf8
              getOffset, getSource, # Info
              backtrackable, commit, # Backtracking
              loop, # Looping
-             chompString, chompChar, keyword
+             chompString, chompChar, keyword, string
              ]
     imports [Parser.Advanced.Utf8.{}]
 
@@ -225,8 +225,9 @@ rwstr = \raw ->
     chompString raw
     |> getChompedRawStr
 
-string: RawStr -> Parser Str
-string = \raw ->
+string: Str -> Parser Str
+string = \str ->
+    raw <- Result.try (strToRawStr str)
     rwstr raw
     |> map rawStrToStr
     |> flatten
@@ -239,5 +240,10 @@ rawStrToStr : RawStr -> Result Str Problem
 rawStrToStr = \raw ->
     _ <- Result.onErr (Str.fromUtf8 raw)
     Err (ParsingFailure "Failed to create Str from raw string (List U8).")
+
+strToRawStr : Str -> Result RawStr Problem
+strToRawStr = \str ->
+    _ <- Result.onErr (Str.toUtf8 str)
+    Err (ParsingFailure "Failed to create raw string (List U8) from Str.")    
 
        
