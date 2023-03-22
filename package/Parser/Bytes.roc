@@ -35,7 +35,7 @@ Problem : [
 ]
 
 # -- RUN ------------------
-
+# To be refactored: do not reference internal types.
 buildPrimitiveParser = Parser.Advanced.Bytes.buildPrimitiveParser
 
 run : Parser a, ByteList -> Result a (List DeadEnd)
@@ -53,8 +53,9 @@ problemToDeadEnd = \d ->
 
 # -- PRIMITIVES -----------
 
-#const : v -> Parser * v
-const = Parser.Advanced.Bytes.const
+const : v -> Parser v
+const =\value ->
+    Parser.Advanced.Bytes.const value
 
 problem : Str -> Parser *
 problem = \msg -> 
@@ -72,63 +73,61 @@ end =
 # -- COMBINATORS ----------
 
 map: Parser a, (a -> b) -> Parser b
-map = 
-    Parser.Advanced.Bytes.map    
+map = \parser, mapper ->
+    Parser.Advanced.Bytes.map parser mapper
 
 map2: Parser a, Parser b, (a, b -> d) -> Parser d
-map2 = 
-    Parser.Advanced.Bytes.map2
+map2 = \first, second, mapper ->
+    Parser.Advanced.Bytes.map2 first second mapper
 
 keep: Parser (a -> b), Parser a -> Parser b        
-keep = 
-    Parser.Advanced.Bytes.keep
+keep = \parserFunc, parser ->
+    Parser.Advanced.Bytes.keep parserFunc parser
 
 skip: Parser keep, Parser ignore -> Parser keep
-skip = 
-    Parser.Advanced.Bytes.skip
+skip = \parserKeep, parserSkip ->
+    Parser.Advanced.Bytes.skip parserKeep parserSkip
 
 andThen: Parser a, (a -> Parser b) -> Parser b
-andThen = 
-    Parser.Advanced.Bytes.andThen
+andThen = \parser, parserBuilder ->
+    Parser.Advanced.Bytes.andThen parser parserBuilder
 
 alt: Parser v, Parser v -> Parser v
-alt = 
-    Parser.Advanced.Bytes.alt          
+alt = \first, second ->
+    Parser.Advanced.Bytes.alt first second          
 
 oneOf : List (Parser v) -> Parser v
-oneOf = 
-    Parser.Advanced.Bytes.oneOf    
+oneOf = \parsers ->
+    Parser.Advanced.Bytes.oneOf parsers
 
 lazy : ({} -> Parser v) -> Parser v
-lazy = 
-    Parser.Advanced.Bytes.lazy     
-
+lazy = \thunk -> 
+    Parser.Advanced.Bytes.lazy thunk
 
 many : Parser v -> Parser (List v)
-many = 
-    Parser.Advanced.Bytes.many
+many = \parser ->
+    Parser.Advanced.Bytes.many parser
 
 oneOrMore : Parser v -> Parser (List v)
-oneOrMore = 
-    Parser.Advanced.Bytes.oneOrMore    
+oneOrMore = \parser ->
+    Parser.Advanced.Bytes.oneOrMore parser   
 
 between : Parser v, Parser *, Parser * -> Parser v
-between = 
-    Parser.Advanced.Bytes.between           
+between = \parser, open, close ->
+    Parser.Advanced.Bytes.between parser open close      
 
 sepBy : Parser v, Parser * -> Parser (List v)
-sepBy = 
-    Parser.Advanced.Bytes.sepBy
+sepBy = \parser, separator ->
+    Parser.Advanced.Bytes.sepBy parser separator
 
 
 ignore : Parser v -> Parser {}
-ignore = 
-    Parser.Advanced.Bytes.ignore     
-
+ignore = \parser ->
+    Parser.Advanced.Bytes.ignore parser
 
 flatten : Parser (Result v Problem) -> Parser v
-flatten = 
-    Parser.Advanced.Bytes.flatten
+flatten = \parser ->
+    Parser.Advanced.Bytes.flatten parser
 
 # ---- CHOMPERS -------
 
@@ -138,27 +137,27 @@ chompIf = \isGood ->
 
 
 getChompedBytes : Parser * -> Parser ByteList
-getChompedBytes = 
-    Parser.Advanced.Bytes.getChompedBytes
+getChompedBytes = \parser ->
+    Parser.Advanced.Bytes.getChompedBytes parser
 
 mapChompedBytes : Parser a, (ByteList, a -> b) -> Parser b
-mapChompedBytes = 
-    Parser.Advanced.Bytes.mapChompedBytes
+mapChompedBytes = \parser, mapper ->
+    Parser.Advanced.Bytes.mapChompedBytes parser mapper
        
 
 chompWhile: (Byte -> Bool) -> Parser {}
-chompWhile = 
-    Parser.Advanced.Bytes.chompWhile
+chompWhile = \isGood ->
+    Parser.Advanced.Bytes.chompWhile isGood
 
 
 chompUntil : ByteList -> Parser {}
-chompUntil = \tok ->  
-    Parser.Advanced.Bytes.chompUntil (toToken tok)
+chompUntil = \bytelist -> 
+    Parser.Advanced.Bytes.chompUntil (toToken bytelist)
 
 
 chompUntilEndOr : ByteList -> Parser {}
-chompUntilEndOr = 
-    Parser.Advanced.Bytes.chompUntilEndOr
+chompUntilEndOr = \bytelist ->
+    Parser.Advanced.Bytes.chompUntilEndOr bytelist
 
 
 # -- LOOP ---------
@@ -166,19 +165,19 @@ chompUntilEndOr =
 Step state a : Parser.Advanced.Bytes.Step state a
 
 loop : state, (state -> Parser (Step state a)) -> Parser a
-loop = 
-    Parser.Advanced.Bytes.loop
+loop =  \state, callback ->
+    Parser.Advanced.Bytes.loop state callback
 
 
 # -- BACKTRACKABLE ---------
 
 backtrackable : Parser a -> Parser a
-backtrackable = 
-    Parser.Advanced.Bytes.backtrackable
+backtrackable = \parser ->
+    Parser.Advanced.Bytes.backtrackable parser
 
 commit : a -> Parser a
-commit = 
-    Parser.Advanced.Bytes.commit
+commit = \value ->
+    Parser.Advanced.Bytes.commit value
 
 # -- POSITION
 
@@ -193,8 +192,8 @@ getSource =
 # -- TOKEN
 
 token : ByteList -> Parser {}
-token = \tok ->
-    Parser.Advanced.Bytes.token (tok |> toToken)
+token = \bytelist ->
+    Parser.Advanced.Bytes.token (bytelist |> toToken)
 
 toToken: ByteList -> Parser.Advanced.Bytes.Token Problem
 toToken = \tok ->
@@ -204,8 +203,8 @@ toToken = \tok ->
 # -- Byte specific
 
 chompBytes :  ByteList -> Parser {}
-chompBytes =
-    token
+chompBytes = \bytelist ->
+    token bytelist
 
 chompByte : Byte -> Parser {}
 chompByte = \b ->

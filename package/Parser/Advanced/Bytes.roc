@@ -27,142 +27,141 @@ Token p : Parser.Advanced.Generic.Token Byte p
 
 # -- RUN ------------------
 
-buildPrimitiveParser = Parser.Advanced.Generic.buildPrimitiveParser
+#To be refactored: should not reference internal types
+buildPrimitiveParser = 
+    Parser.Advanced.Generic.buildPrimitiveParser
 
 run : Parser c p a, ByteList -> Result a (List (DeadEnd c p))
-run = 
-    Parser.Advanced.Generic.run
+run = \parser, src ->
+    Parser.Advanced.Generic.run parser src
         
 # -- PRIMITIVES -----------
 
 const : v -> Parser * * v
-const = Parser.Advanced.Generic.const
+const = \value ->
+    Parser.Advanced.Generic.const value
 
 problem : p -> Parser * p *
-problem = 
-     Parser.Advanced.Generic.problem
+problem = \prob ->
+     Parser.Advanced.Generic.problem prob
 
 fail : Parser * * *
 fail = 
     Parser.Advanced.Generic.fail
     
 end: p -> Parser * p {}
-end = 
-    Parser.Advanced.Generic.end    
+end = \expecting ->
+    Parser.Advanced.Generic.end expecting
 
-
-# # -- COMBINATORS ----------
+# -- COMBINATORS ----------
 
 map: Parser c p a, (a -> b) -> Parser c p b
-map = 
-    Parser.Advanced.Generic.map    
+map = \parser, mapper ->
+    Parser.Advanced.Generic.map parser mapper
 
 map2: Parser c p a, Parser c p b, (a, b -> d) -> Parser c p d
-map2 = 
-    Parser.Advanced.Generic.map2
+map2 = \first, second, mapper ->
+    Parser.Advanced.Generic.map2 first second mapper
 
-keep: Parser c p (a -> b), Parser c p a -> Parser c p b        
-keep = 
-    Parser.Advanced.Generic.keep
+keep: Parser c p (a -> b), Parser c p a -> Parser c p b
+keep = \parserFunc, parser ->
+    Parser.Advanced.Generic.keep parserFunc parser
 
 skip: Parser c p keep, Parser c p ignore -> Parser c p keep
-skip = 
-    Parser.Advanced.Generic.skip
+skip = \parserKeep, parserSkip ->
+    Parser.Advanced.Generic.skip parserKeep parserSkip
 
 andThen: Parser c p a, (a -> Parser c p b) -> Parser c p b
-andThen = 
-    Parser.Advanced.Generic.andThen
+andThen = \parser, parserBuilder ->
+    Parser.Advanced.Generic.andThen parser parserBuilder
 
 alt: Parser c p v, Parser c p v -> Parser c p v
-alt = 
-    Parser.Advanced.Generic.alt          
+alt = \first, second ->
+    Parser.Advanced.Generic.alt first second        
 
 oneOf : List (Parser c p v) -> Parser c p v
-oneOf = 
-    Parser.Advanced.Generic.oneOf    
+oneOf = \parsers ->
+    Parser.Advanced.Generic.oneOf parsers 
 
 lazy : ({} -> Parser c p v) -> Parser c p v
-lazy = 
-    Parser.Advanced.Generic.lazy     
-
+lazy = \thunk ->
+    Parser.Advanced.Generic.lazy thunk
 
 many : Parser c p v -> Parser c p (List v)
-many = 
-    Parser.Advanced.Generic.many
+many = \parser ->
+    Parser.Advanced.Generic.many parser
 
 oneOrMore : Parser c p v -> Parser c p (List v)
-oneOrMore = 
-    Parser.Advanced.Generic.oneOrMore    
+oneOrMore = \parser ->
+    Parser.Advanced.Generic.oneOrMore parser  
 
 between : Parser c p v, Parser c p *, Parser c p * -> Parser c p v
-between = 
-    Parser.Advanced.Generic.between           
+between = \parser, open, close ->
+    Parser.Advanced.Generic.between parser open close         
 
 sepBy : Parser c p v, Parser c p * -> Parser c p (List v)
-sepBy = 
-    Parser.Advanced.Generic.sepBy
-
+sepBy = \parser, separator ->
+    Parser.Advanced.Generic.sepBy parser separator
 
 ignore : Parser c p v -> Parser c p {}
-ignore = 
-    Parser.Advanced.Generic.ignore     
-
+ignore = \parser ->
+    Parser.Advanced.Generic.ignore parser 
 
 flatten : Parser c p (Result v p) -> Parser c p v
-flatten = 
-    Parser.Advanced.Generic.flatten
+flatten = \parser ->
+    Parser.Advanced.Generic.flatten parser
 
-# # ---- CHOMPERS -------
+# ---- CHOMPERS -------
 
 chompIf: (Byte -> Bool), p -> Parser * p {}
-chompIf =
-    Parser.Advanced.Generic.chompIf     
+chompIf = \isGood, expecting ->
+    Parser.Advanced.Generic.chompIf isGood expecting
 
 
 getChompedBytes : Parser c p * -> Parser c p ByteList
-getChompedBytes = 
-    Parser.Advanced.Generic.getChompedSource
+getChompedBytes = \parser ->
+    Parser.Advanced.Generic.getChompedSource parser
 
 mapChompedBytes : Parser c p a, (ByteList, a -> b) -> Parser c p b
-mapChompedBytes = 
-    Parser.Advanced.Generic.mapChompedSource
+mapChompedBytes = \parser, mapper ->
+    Parser.Advanced.Generic.mapChompedSource parser mapper
        
 
 chompWhile: (Byte -> Bool) -> Parser c p {}
-chompWhile = 
-    Parser.Advanced.Generic.chompWhile
+chompWhile = \isGood ->
+    Parser.Advanced.Generic.chompWhile isGood
 
 
 chompUntil : Token p -> Parser * p {}
-chompUntil = 
-    Parser.Advanced.Generic.chompUntil 
+chompUntil = \tok ->
+    Parser.Advanced.Generic.chompUntil tok
 
 
 chompUntilEndOr : ByteList -> Parser c p {}
-chompUntilEndOr = 
-    Parser.Advanced.Generic.chompUntilEndOr
+chompUntilEndOr = \tok ->
+    Parser.Advanced.Generic.chompUntilEndOr tok
 
 
-# # -- LOOP ---------
+# -- LOOP ---------
 
 Step state a : Parser.Advanced.Generic.Step state a
 
 loop : state, (state -> Parser c p (Step state a)) -> Parser c p a
-loop = 
-    Parser.Advanced.Generic.loop
+loop = \state, callback ->
+    Parser.Advanced.Generic.loop state callback
 
 
-# # -- BACKTRACKABLE ---------
+# -- BACKTRACKABLE ---------
 
 backtrackable : Parser c p a -> Parser c p a
-backtrackable = 
-    Parser.Advanced.Generic.backtrackable
+backtrackable = \parser ->
+    Parser.Advanced.Generic.backtrackable parser
 
 commit : a -> Parser * * a
-commit = 
-    Parser.Advanced.Generic.commit
+commit = \value ->
+    Parser.Advanced.Generic.commit value
 
-# # -- POSITION
+# -- POSITION
 
 getOffset: Parser * * Nat
 getOffset =
@@ -175,5 +174,5 @@ getSource =
 # -- TOKEN
 
 token : Token p -> Parser * p {}
-token = 
-    Parser.Advanced.Generic.token
+token = \tok ->
+    Parser.Advanced.Generic.token tok
