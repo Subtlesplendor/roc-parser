@@ -3,7 +3,7 @@ interface Parser.Advanced.Generic
              buildPrimitiveParser,
              run, #Operating
              const, fail, problem, end, token, key, #Primitives
-             map, map2, keep, skip, andThen, flatten, #Combinators
+             map, map2, keep, skip, andThen, flatten,#Combinators
              lazy, many, oneOrMore, alt, oneOf, between, sepBy, ignore, #Combinators
              chompIf, chompWhile, chompUntil, chompUntilEndOr, getChompedSource, mapChompedSource, #Chompers
              getOffset, getSource,
@@ -18,6 +18,11 @@ interface Parser.Advanced.Generic
 ## The parser parses lists of `input` and returns a `value`.
 
 ## The parser operates by moving a cursor along the list. The input is never consumed.
+
+# Possible combinators to add:
+# followedBy, notFollowedBy : Parser a -> Parser b -> Parser {}
+# e.g. chompIf (\c -> c == 'x') |> followedBy spaces
+# notFollowedBy 
 
 
 # -- TYPES ------------------ 
@@ -204,6 +209,35 @@ flatten = \@Parser parser ->
             Err p ->
                 Err {stack: fromState s1 p, backtrackable: b1 }
 
+
+# followedBy : Parser c i p a, Parser c i p * -> Parser c i p a
+# followedBy = \@Parser parser, @Parser follows ->
+#     @Parser \s ->
+#         step <- Result.try (parser s)
+
+#         when (follows step.state) is
+#             Ok _ ->
+#                 Ok step
+#             Err err ->
+#                 Err err
+
+
+
+
+# after: Parser c i p a, Parser c i p (List a) -> Parser c i p (List a)
+# after = \@Parser first, @Parser second ->
+#     @Parser \s ->
+#         {val: v1, state: s1, backtrackable: b1} <- Result.try (first s)
+#         when second s1 is
+#             Err err ->
+#                 Err {stack: err.stack, backtrackable: b1 |> and err.backtrackable}
+            
+#             Ok {val: vals, state: s2, backtrackable: b2} ->
+#                 Ok {val: vals |> List.append v1, state: s2, backtrackable: b1 |> and b2}
+
+# sequence: List (Parser c i p a) -> Parser c i p (List a)
+# sequence = \parsers ->
+#         List.walkBackwards parsers (const []) (\laterParser, earlierParser -> earlierParser |> after laterParser) 
 # ---- LOW LEVEL FUNCTIONS -------
 
 chompIf: (i -> Bool), p -> Parser * i p {}
@@ -221,13 +255,13 @@ chompIf = \isGood, expecting ->
 
 
 
-getChompedSource : Parser c i p * -> Parser c i p (List i)
+getChompedSource: Parser c i p * -> Parser c i p (List i)
 getChompedSource = \parser ->
     parser |> mapChompedSource (\l, _ -> l)
 
 
 #The case when the parser has moved backwards might be better handled than this?
-mapChompedSource : Parser c i p a, (List i, a -> b) -> Parser c i p b
+mapChompedSource: Parser c i p a, (List i, a -> b) -> Parser c i p b
 mapChompedSource = \@Parser parse, f ->
         @Parser \s0 ->
             {val: a, state: s1, backtrackable: b1} <- Result.try(parse s0)
@@ -255,7 +289,7 @@ chompWhile = \isGood ->
             backtrackable: if finalPos > initialPos then No else Yes}
 
 
-chompUntil : Token i p -> Parser * i p {}
+chompUntil: Token i p -> Parser * i p {}
             | i has Eq
 chompUntil = \{tok, expecting} ->
     @Parser \s ->
@@ -267,7 +301,7 @@ chompUntil = \{tok, expecting} ->
                 Err {stack: fromState s expecting, backtrackable: Yes}
 
 
-chompUntilEndOr : List i -> Parser * i * {}
+chompUntilEndOr: List i -> Parser * i * {}
                     | i has Eq 
 chompUntilEndOr = \lst ->
     @Parser \s ->

@@ -1,5 +1,5 @@
 interface Parser.Utf8
-    exposes [Parser, DeadEnd, #Types
+    exposes [Parser, DeadEnd, RawStr, RawChar, #Types
              buildPrimitiveParser,
              run, #Operating
              const, fail, problem, end, token, #Primitives
@@ -9,7 +9,7 @@ interface Parser.Utf8
              getOffset, getSource, # Info
              backtrackable, commit, # Backtracking
              loop, # Looping
-             chompString, chompChar, keyword
+             chompString, chompChar, keyword, string
              ]
     imports [Parser.Advanced.Utf8.{}]
 
@@ -37,6 +37,7 @@ Problem : [
 
 # -- RUN ------------------
 
+# To be refactored: do not reference internal types.
 buildPrimitiveParser = Parser.Advanced.Utf8.buildPrimitiveParser
 
 run : Parser a, RawStr -> Result a (List DeadEnd)
@@ -54,8 +55,9 @@ problemToDeadEnd = \d ->
 
 # -- PRIMITIVES -----------
 
-#const : v -> Parser * v
-const = Parser.Advanced.Utf8.const
+const : v -> Parser v
+const = \value ->
+    Parser.Advanced.Utf8.const value
 
 problem : Str -> Parser *
 problem = \msg -> 
@@ -73,63 +75,63 @@ end =
 # -- COMBINATORS ----------
 
 map: Parser a, (a -> b) -> Parser b
-map = 
-    Parser.Advanced.Utf8.map    
+map = \parser, mapper ->
+    Parser.Advanced.Utf8.map parser mapper 
 
 map2: Parser a, Parser b, (a, b -> d) -> Parser d
-map2 = 
-    Parser.Advanced.Utf8.map2
+map2 = \first, second, mapper ->
+    Parser.Advanced.Utf8.map2 first second mapper
 
 keep: Parser (a -> b), Parser a -> Parser b        
-keep = 
-    Parser.Advanced.Utf8.keep
+keep = \parserFunc, parser ->
+    Parser.Advanced.Utf8.keep parserFunc parser
 
 skip: Parser keep, Parser ignore -> Parser keep
-skip = 
-    Parser.Advanced.Utf8.skip
+skip = \parserKeep, parserSkip ->
+    Parser.Advanced.Utf8.skip parserKeep parserSkip
 
 andThen: Parser a, (a -> Parser b) -> Parser b
-andThen = 
-    Parser.Advanced.Utf8.andThen
+andThen = \parser, parserBuilder ->
+    Parser.Advanced.Utf8.andThen parser parserBuilder
 
 alt: Parser v, Parser v -> Parser v
-alt = 
-    Parser.Advanced.Utf8.alt          
+alt = \first, second  ->
+    Parser.Advanced.Utf8.alt first second       
 
 oneOf : List (Parser v) -> Parser v
-oneOf = 
-    Parser.Advanced.Utf8.oneOf    
+oneOf = \parsers ->
+    Parser.Advanced.Utf8.oneOf parsers
 
 lazy : ({} -> Parser v) -> Parser v
-lazy = 
-    Parser.Advanced.Utf8.lazy     
+lazy = \thunk ->
+    Parser.Advanced.Utf8.lazy thunk 
 
 
 many : Parser v -> Parser (List v)
-many = 
-    Parser.Advanced.Utf8.many
+many = \parser ->
+    Parser.Advanced.Utf8.many parser
 
 oneOrMore : Parser v -> Parser (List v)
-oneOrMore = 
-    Parser.Advanced.Utf8.oneOrMore    
+oneOrMore = \parser ->
+    Parser.Advanced.Utf8.oneOrMore parser  
 
 between : Parser v, Parser *, Parser * -> Parser v
-between = 
-    Parser.Advanced.Utf8.between           
+between = \parser, open, close ->
+    Parser.Advanced.Utf8.between parser open close          
 
 sepBy : Parser v, Parser * -> Parser (List v)
-sepBy = 
-    Parser.Advanced.Utf8.sepBy
+sepBy = \parser, separator ->
+    Parser.Advanced.Utf8.sepBy parser separator
 
 
 ignore : Parser v -> Parser {}
-ignore = 
-    Parser.Advanced.Utf8.ignore     
+ignore = \parser ->
+    Parser.Advanced.Utf8.ignore parser    
 
 
 flatten : Parser (Result v Problem) -> Parser v
-flatten = 
-    Parser.Advanced.Utf8.flatten
+flatten = \parser ->
+    Parser.Advanced.Utf8.flatten parser
 
 # ---- CHOMPERS -------
 
@@ -139,17 +141,17 @@ chompIf = \isGood ->
 
 
 getChompedRawStr : Parser * -> Parser RawStr
-getChompedRawStr = 
-    Parser.Advanced.Utf8.getChompedRawStr
+getChompedRawStr = \parser ->
+    Parser.Advanced.Utf8.getChompedRawStr parser
 
 mapChompedRawStr : Parser a, (RawStr, a -> b) -> Parser b
-mapChompedRawStr = 
-    Parser.Advanced.Utf8.mapChompedRawStr
+mapChompedRawStr = \parser, mapper ->
+    Parser.Advanced.Utf8.mapChompedRawStr parser mapper
        
 
 chompWhile: (RawChar -> Bool) -> Parser {}
-chompWhile = 
-    Parser.Advanced.Utf8.chompWhile
+chompWhile = \isGood ->
+    Parser.Advanced.Utf8.chompWhile isGood
 
 
 chompUntil : RawStr -> Parser {}
@@ -158,8 +160,8 @@ chompUntil = \tok ->
 
 
 chompUntilEndOr : RawStr -> Parser {}
-chompUntilEndOr = 
-    Parser.Advanced.Utf8.chompUntilEndOr
+chompUntilEndOr = \raw ->
+    Parser.Advanced.Utf8.chompUntilEndOr raw
 
 
 # -- LOOP ---------
@@ -167,19 +169,19 @@ chompUntilEndOr =
 Step state a : Parser.Advanced.Utf8.Step state a
 
 loop : state, (state -> Parser (Step state a)) -> Parser a
-loop = 
-    Parser.Advanced.Utf8.loop
+loop = \state, callback ->
+    Parser.Advanced.Utf8.loop state callback
 
 
 # -- BACKTRACKABLE ---------
 
 backtrackable : Parser a -> Parser a
-backtrackable = 
-    Parser.Advanced.Utf8.backtrackable
+backtrackable = \parser -> 
+    Parser.Advanced.Utf8.backtrackable parser
 
 commit : a -> Parser a
-commit = 
-    Parser.Advanced.Utf8.commit
+commit = \value ->
+    Parser.Advanced.Utf8.commit value
 
 # -- POSITION
 
@@ -211,33 +213,38 @@ keyword = \rawstr ->
     Parser.Advanced.Utf8.keyword separators {tok: rawstr, expecting: ExpectingKeyword rawstr}
 
 chompString :  RawStr -> Parser {}
-chompString =
-    token
+chompString = \raw ->
+    token raw
 
 chompChar : RawChar -> Parser {}
 chompChar = \b ->
     chompIf (\x -> x == b)
 
-# string: RawStr -> Parser Str
-# string = \rawStr ->
-#     res <- (chompString rawStr
-#             |> mapChompedRawStr (\s, _ -> Str.fromUtf8 rawStr)
-#             |> andThen)
-
-#     when res is 
-#         Err _ ->
-#             problem "Failed to create Str from raw string (List U8)."
-#         Ok str ->
-#             const str
-
-# string: RawStr -> Parser Str
-# string = \rawStr ->
-#     chompString rawStr
-#         |> mapChompedRawStr (\s, _ -> Str.fromUtf8 rawStr)
-#         |> flatten
 
 
-# doesNotCompile: RawStr -> Parser RawStr
-# doesNotCompile = \rawStr ->
-#     chompString rawStr
-#         |> mapChompedRawStr (\s, _ -> s)           
+rwstr : RawStr -> Parser RawStr
+rwstr = \raw ->
+    chompString raw
+    |> getChompedRawStr
+
+string: Str -> Parser Str
+string = \str ->
+    strToRawStr str
+    |> rwstr
+    |> map rawStrToStr
+    |> flatten
+
+
+
+# --- Internal -------
+
+rawStrToStr : RawStr -> Result Str Problem
+rawStrToStr = \raw ->
+    _ <- Result.onErr (Str.fromUtf8 raw)
+    Err (ParsingFailure "Failed to create Str from raw string (List U8).")
+
+strToRawStr : Str -> RawStr 
+strToRawStr = \str ->
+    Str.toUtf8 str  
+
+       
