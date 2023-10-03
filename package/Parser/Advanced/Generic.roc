@@ -60,7 +60,7 @@ and = \b1, b2 ->
 buildPrimitiveParser: (State c i -> PStep c i p v) -> Parser c i p v
 buildPrimitiveParser = \f ->
         @Parser f        
-
+        
 # Run a parser and get a Result.
 run: Parser c i p v, List i-> Result v (List (DeadEnd c p))
 run = \@Parser parse, src ->
@@ -289,8 +289,7 @@ chompWhile = \isGood ->
             backtrackable: if finalPos > initialPos then No else Yes}
 
 
-chompUntil: Token i p -> Parser * i p {}
-            | i has Eq
+chompUntil: Token i p -> Parser * i p {} where i implements Eq
 chompUntil = \{tok, expecting} ->
     @Parser \s ->
         when findSubSource tok s.offset s.src is
@@ -301,8 +300,7 @@ chompUntil = \{tok, expecting} ->
                 Err {stack: fromState s expecting, backtrackable: Yes}
 
 
-chompUntilEndOr: List i -> Parser * i * {}
-                    | i has Eq 
+chompUntilEndOr: List i -> Parser * i * {} where i implements Eq
 chompUntilEndOr = \lst ->
     @Parser \s ->
         initialOffset = s.offset
@@ -371,7 +369,7 @@ getSource =
 
 Token i p : { tok: List i, expecting: p}
 
-token : Token i p -> Parser * i p {} | i has Eq
+token : Token i p -> Parser * i p {} where i implements Eq
 token = \{tok, expecting} ->
     @Parser \s ->
         when isSubSource tok s.offset s.src is
@@ -381,7 +379,7 @@ token = \{tok, expecting} ->
             Err _ ->
                 Err {stack: fromState s expecting, backtrackable: Yes}
 
-key: List i, Token i p -> Parser * i p {} | i has Eq
+key: List i, Token i p -> Parser * i p {} where i implements Eq
 key = \separators, {tok, expecting} ->
     @Parser \s ->
         when isSubSource tok s.offset s.src is
@@ -414,8 +412,7 @@ key = \separators, {tok, expecting} ->
 
 # -- LOW LEVEL ---------
 
-isSubSource : List i, Nat, List i -> Result Nat [OutOfBounds]
-            | i has Eq
+isSubSource : List i, Nat, List i -> Result Nat [OutOfBounds] where i implements Eq
 isSubSource = \smallSrc, offset, bigSrc ->
     if offset + List.len smallSrc <= List.len bigSrc then
 
@@ -431,8 +428,7 @@ isSubSource = \smallSrc, offset, bigSrc ->
         Err OutOfBounds
 
 
-findSubSource : List i, Nat, List i -> Result Nat [OutOfBounds]
-                | i has Eq
+findSubSource : List i, Nat, List i -> Result Nat [OutOfBounds] where i implements Eq
 findSubSource = \smallSrc, offset, bigSrc -> 
    smallLen = List.len smallSrc
 

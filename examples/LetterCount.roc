@@ -6,16 +6,59 @@ app "example"
     imports [
         cli.Stdout,
         cli.Stderr,
-        #parser.ParserCore.{ Parser, buildPrimitiveParser, many },
-        parser.Parser.Utf8.{RawChar},
+        parser.Parser.Advanced.Generic,
+        parser.Parser.Advanced.Utf8,
+        parser.Parser.Utf8.{ Parser, buildPrimitiveParser, fromState, RawStr, RawChar, string, map, keep, chompIf, chompWhile, skip, const, getChompedRawStr },
     ]
     provides [main] to cli
 
 
+Letter : [A, B, C, Other]
+
+toLetter : RawChar -> Letter
+toLetter = \c ->
+    when c is
+        65 -> A
+        66 -> B
+        67 -> C
+        _ -> Other
+
+toLetters : RawStr -> List Letter
+toLetters = \s -> s |> List.map toLetter
+#Problem : [ParsingFailure Str]
+
+isNotStar: RawChar -> Bool
+isNotStar = \c -> c != 42
+
+always: RawChar -> Bool
+always = \_ -> Bool.true
+
+everything = chompWhile always
+
+chomped = getChompedRawStr
+
+
+letter : Parser (List Letter)
+letter = 
+    const toLetter
+    |> skip everything
+    |> keep chomped
+    |> map toLetters
+    
+
+# letterParser : Parser Letter
+# letterParser =
+#     buildPrimitiveParser \state ->
+#         input = state.src
+#         when input is
+#             [] -> Bad Bool.false (fromState state (ParsingFailure "Nothing to parse"))
+#             ['A', ..] -> Good Bool.false A {state & src: List.dropFirst input}
+#             ['B', ..] -> Good Bool.false B {state & src: List.dropFirst input}
+#             ['C', ..] -> Good Bool.false C {state & src: List.dropFirst input}
+#             _ -> Good Bool.false Other {state & src: List.dropFirst input}
 
 main =
-    lettersInput = "AAAiBByAABBwBtCCCiAyArBBx"
-    Stdout.line "hi"
+    Stdout.line "hello"
 # main =
 #     lettersInput = "AAAiBByAABBwBtCCCiAyArBBx"
 #     ifLetterA = \l -> l == A

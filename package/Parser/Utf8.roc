@@ -13,7 +13,6 @@ interface Parser.Utf8
              ]
     imports [Parser.Advanced.Utf8.{}]
 
-
 # -- PARSERS ------------------
 
 RawChar: Parser.Advanced.Utf8.RawChar
