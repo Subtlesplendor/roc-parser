@@ -7,7 +7,7 @@ app "example"
         cli.Stdout,
         #cli.Stderr,
         #parser.Parser.Advanced.Generic,
-        parser.Parser.Advanced.Utf8,
+        #parser.Parser.Advanced.Utf8,
         #parser.Parser.Utf8.{ Parser, buildPrimitiveParser, fromState, RawStr, RawChar, string, map, keep, chompIf, chompWhile, skip, const, getChompedRawStr },
         parser.Parser.Utf8.{ Parser } 
     ]
