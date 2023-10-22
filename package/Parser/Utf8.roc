@@ -11,7 +11,7 @@ interface Parser.Utf8
              loop, # Looping
              chompString, chompChar, keyword, string
              ]
-    imports [Parser.Advanced.Utf8.{}]
+    imports [Parser.Advanced.Utf8]
 
 # -- PARSERS ------------------
 

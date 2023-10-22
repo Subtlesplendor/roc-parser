@@ -1,49 +1,50 @@
 app "example"
     packages {
-        cli: "https://github.com/roc-lang/basic-cli/releases/download/0.3.2/tE4xS_zLdmmxmHwHih9kHWQ7fsXtJr7W7h3425-eZFk.tar.br",
+        cli: "https://github.com/roc-lang/basic-cli/releases/download/0.5.0/Cufzl36_SnJ4QbOoEmiJ5dIpUxBvdB3NEySvuH82Wio.tar.br",
         parser: "../package/main.roc",
     }
     imports [
         cli.Stdout,
-        cli.Stderr,
-        parser.Parser.Advanced.Generic,
+        #cli.Stderr,
+        #parser.Parser.Advanced.Generic,
         parser.Parser.Advanced.Utf8,
-        parser.Parser.Utf8.{ Parser, buildPrimitiveParser, fromState, RawStr, RawChar, string, map, keep, chompIf, chompWhile, skip, const, getChompedRawStr },
+        #parser.Parser.Utf8.{ Parser, buildPrimitiveParser, fromState, RawStr, RawChar, string, map, keep, chompIf, chompWhile, skip, const, getChompedRawStr },
+        parser.Parser.Utf8.{ Parser } 
     ]
     provides [main] to cli
 
 
-Letter : [A, B, C, Other]
+# Letter : [A, B, C, Other]
 
-toLetter : RawChar -> Letter
-toLetter = \c ->
-    when c is
-        65 -> A
-        66 -> B
-        67 -> C
-        _ -> Other
+# toLetter : RawChar -> Letter
+# toLetter = \c ->
+#     when c is
+#         65 -> A
+#         66 -> B
+#         67 -> C
+#         _ -> Other
 
-toLetters : RawStr -> List Letter
-toLetters = \s -> s |> List.map toLetter
-#Problem : [ParsingFailure Str]
+# toLetters : RawStr -> List Letter
+# toLetters = \s -> s |> List.map toLetter
+# #Problem : [ParsingFailure Str]
 
-isNotStar: RawChar -> Bool
-isNotStar = \c -> c != 42
+# isNotStar: RawChar -> Bool
+# isNotStar = \c -> c != 42
 
-always: RawChar -> Bool
-always = \_ -> Bool.true
+# always: RawChar -> Bool
+# always = \_ -> Bool.true
 
-everything = chompWhile always
+# everything = chompWhile always
 
-chomped = getChompedRawStr
+# chomped = getChompedRawStr
 
 
-letter : Parser (List Letter)
-letter = 
-    const toLetter
-    |> skip everything
-    |> keep chomped
-    |> map toLetters
+# letter : Parser (List Letter)
+# letter = 
+#     const toLetter
+#     |> skip everything
+#     |> keep chomped
+#     |> map toLetters
     
 
 # letterParser : Parser Letter

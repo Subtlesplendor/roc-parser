@@ -11,7 +11,7 @@ interface Parser.Advanced.Utf8
              loop, # Looping
              keyword
              ]
-    imports [Parser.Advanced.Generic.{}]
+    imports [Parser.Advanced.Generic]
 
 
 # -- PARSERS ------------------

@@ -11,7 +11,7 @@ interface Parser.Bytes
              loop, # Looping
              chompBytes, chompByte
              ]
-    imports [Parser.Advanced.Bytes.{}]
+    imports [Parser.Advanced.Bytes]
 
 
 # -- PARSERS ------------------

@@ -10,7 +10,7 @@ interface Parser.Advanced.Bytes
              backtrackable, commit, # Backtracking
              loop, # Looping
              ]
-    imports [Parser.Advanced.Generic.{}]
+    imports [Parser.Advanced.Generic]
 
 
 # -- PARSERS ------------------
